@@ -191,7 +191,7 @@ http://localhost/B2DEV
 # 4. Accès admin
 http://localhost/B2DEV/admin
 Email: admin1@gmail.com
-Mot de passe: admin1
+Mot de passe: Adminmdp1
 ```
 
 ### **Tests API** ✅ FONCTIONNELLES
