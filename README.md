@@ -288,7 +288,7 @@ GET  http://localhost/B2DEV/admin/api/analytics.php        ✅
 ## 📞 Contact & Support
 
 - **Email** : [yoann.sogoyou@ynov.com] / [matthias.pollet@ynov.com]
-- **GitHub** : [https://github.com/sogoyou8/B2-DEV]
+- **GitHub** : [https://github.com/sogoyou8/B2DEV]
 - **LinkedIn** : Profils étudiants Paris Ynov Campus
 
 ---
