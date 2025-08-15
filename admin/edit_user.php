@@ -6,38 +6,21 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
-// LOG SESSION
-error_log('SESSION: ' . print_r($_SESSION, true));
-
-// LOG GET
-error_log('GET: ' . print_r($_GET, true));
-
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
-    error_log('Admin not logged in, redirecting...');
     header("Location: admin_login.php");
     exit;
 }
 
 include '../includes/db.php';
 
-// LOG DB CONNECTION
-try {
-    $dbName = $pdo->query("SELECT DATABASE()")->fetchColumn();
-    error_log('Connected to DB: ' . $dbName);
-} catch (Exception $e) {
-    error_log('DB connection error: ' . $e->getMessage());
-}
-
 // Vérification de l'ID
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-    error_log('ID utilisateur invalide: ' . ($_GET['id'] ?? 'absent'));
     $_SESSION['error'] = "ID utilisateur invalide.";
     header("Location: list_users.php");
     exit;
 }
 
 $id = (int)$_GET['id'];
-error_log('ID demandé: ' . $id);
 
 // Récupérer l'utilisateur
 try {
@@ -45,20 +28,7 @@ try {
     $query->execute([$id]);
     $user = $query->fetch(PDO::FETCH_ASSOC);
 
-    error_log('Résultat SQL utilisateur: ' . print_r($user, true));
-    if ($user) {
-        error_log('User trouvé: ' . print_r($user, true));
-        if (isset($user['created_at'])) {
-            error_log('User created_at: ' . $user['created_at']);
-        } else {
-            error_log('User created_at absent');
-        }
-    } else {
-        error_log('User non trouvé pour ID: ' . $id);
-    }
-
     if (!$user || !is_array($user)) {
-        error_log('Utilisateur introuvable pour ID: ' . $id);
         // Notification persistante en cas d'échec
         $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
         $stmt->execute([
@@ -70,18 +40,13 @@ try {
         exit;
     }
 } catch (PDOException $e) {
-    error_log('Erreur PDO: ' . $e->getMessage());
     $_SESSION['error'] = "Erreur base de données : " . $e->getMessage();
     header("Location: list_users.php");
     exit;
 }
 
-// LOG VALEUR DE LA DATE
-error_log('Valeur de created_at: ' . ($user['created_at'] ?? 'absent'));
-
 // Traitement du formulaire
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    error_log('POST: ' . print_r($_POST, true));
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $role = $_POST['role'] ?? '';
@@ -91,17 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     if (empty($name)) {
         $errors[] = "Le nom est requis.";
-        error_log('Erreur: nom vide');
     }
     
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Email valide requis.";
-        error_log('Erreur: email invalide');
     }
     
     if (!in_array($role, ['user', 'admin'])) {
         $errors[] = "Rôle invalide.";
-        error_log('Erreur: rôle invalide');
     }
     
     // Vérifier que l'email n'est pas déjà utilisé par un autre utilisateur
@@ -110,14 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $check_email = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
             $check_email->execute([$email, $id]);
             $result = $check_email->fetch();
-            error_log('Résultat vérification email: ' . print_r($result, true));
             if ($result) {
                 $errors[] = "Cet email est déjà utilisé par un autre utilisateur.";
-                error_log('Erreur: email déjà utilisé');
             }
         } catch (PDOException $e) {
             $errors[] = "Erreur lors de la vérification : " . $e->getMessage();
-            error_log('Erreur PDO vérification email: ' . $e->getMessage());
         }
     }
     
@@ -126,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         try {
             $query = $pdo->prepare("UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?");
             $success = $query->execute([$name, $email, $role, $id]);
-            error_log('Résultat update: ' . ($success ? 'OK' : 'ECHEC'));
             
             if ($success) {
                 // Notification de succès
@@ -141,31 +99,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 exit;
             } else {
                 $errors[] = "Erreur lors de la mise à jour.";
-                error_log('Erreur: update utilisateur');
             }
         } catch (PDOException $e) {
             $errors[] = "Erreur base de données : " . $e->getMessage();
-            error_log('Erreur PDO update: ' . $e->getMessage());
         }
     }
     
     // Si des erreurs, les stocker pour affichage
     if (!empty($errors)) {
         $_SESSION['errors'] = $errors;
-        error_log('Erreurs formulaire: ' . print_r($errors, true));
     }
 }
 
 include 'includes/header.php';
 ?>
-<script>
-    // Debug PHP dans la console JS
-    console.log("USER PHP:", <?php echo json_encode($user); ?>);
-</script>
-
-<pre style="background:#fff;color:#000;border:1px solid #ccc;padding:10px;">
-<?php var_dump($user); ?>
-</pre>
 
 <main class="container py-4">
     <div class="row justify-content-center">
@@ -198,14 +145,13 @@ include 'includes/header.php';
                         <?php unset($_SESSION['errors']); ?>
                     <?php endif; ?>
                     
-                    <!-- Informations utilisateur actuel - LOG DANS HTML -->
+                    <!-- Informations utilisateur actuel -->
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle me-2"></i>
                         <strong>Modification de :</strong> <?php echo htmlspecialchars($user['name'] ?? 'Utilisateur inconnu'); ?> 
                         (ID: <?php echo $user['id'] ?? 'N/A'; ?>) - 
                         Créé le 
                         <?php
-                        echo '<span style="color:red">[LOG created_at: ' . ($user['created_at'] ?? 'absent') . ']</span>';
                         if (!empty($user['created_at']) && $user['created_at'] !== '0000-00-00 00:00:00') {
                             echo date('d/m/Y H:i', strtotime($user['created_at']));
                         } else {
@@ -290,7 +236,6 @@ include 'includes/header.php';
                                                 <strong>ID :</strong> <?php echo $user['id'] ?? 'N/A'; ?><br>
                                                 <strong>Créé :</strong>
                                                 <?php
-                                                echo '<span style="color:red">[LOG created_at: ' . ($user['created_at'] ?? 'absent') . ']</span>';
                                                 if (!empty($user['created_at']) && $user['created_at'] !== '0000-00-00 00:00:00') {
                                                     echo date('d/m/Y à H:i', strtotime($user['created_at']));
                                                 } else {
@@ -335,12 +280,12 @@ include 'includes/header.php';
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4">
-                            <a href="#" class="btn btn-outline-warning w-100" onclick="alert('Fonctionnalité à venir')">
+                            <a href="reset_user_password.php?id=<?php echo $id; ?>" class="btn btn-outline-warning w-100">
                                 <i class="bi bi-key me-1"></i>Réinitialiser le mot de passe
                             </a>
                         </div>
                         <div class="col-md-4">
-                            <a href="#" class="btn btn-outline-info w-100" onclick="alert('Fonctionnalité à venir')">
+                            <a href="user_activity.php?id=<?php echo $id; ?>" class="btn btn-outline-info w-100">
                                 <i class="bi bi-activity me-1"></i>Voir l'activité
                             </a>
                         </div>
@@ -387,8 +332,6 @@ include 'includes/header.php';
         emailInput.addEventListener('input', function() {
             const email = this.value;
             const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-            console.log('Email input:', email, 'Valid:', isValid);
-            
             if (email.length > 0) {
                 if (isValid) {
                     this.classList.remove('is-invalid');
@@ -409,8 +352,6 @@ include 'includes/header.php';
         roleSelect.addEventListener('change', function() {
             const currentRole = '<?php echo $user['role'] ?? ''; ?>';
             const newRole = this.value;
-            console.log('Changement de rôle:', currentRole, '->', newRole);
-            
             if (currentRole !== newRole && newRole) {
                 const alert = document.createElement('div');
                 alert.className = 'alert alert-warning alert-dismissible fade show mt-2';
@@ -419,23 +360,30 @@ include 'includes/header.php';
                     <strong>Attention :</strong> Vous changez le rôle de "${currentRole}" vers "${newRole}".
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 `;
-                
-                // Supprimer ancienne alerte si existante
                 const existingAlert = roleSelect.parentNode.querySelector('.alert-warning');
                 if (existingAlert) {
                     existingAlert.remove();
                 }
-                
                 roleSelect.parentNode.appendChild(alert);
             }
         });
     }
 
-    // Log du formulaire au chargement
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('Formulaire chargé');
-        console.log('User:', <?php echo json_encode($user); ?>);
-    });
+    // === AJOUT : Confirmation pour modifications sensibles ===
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const initialEmail = '<?php echo addslashes($user['email'] ?? ''); ?>';
+            const initialRole = '<?php echo addslashes($user['role'] ?? ''); ?>';
+            const newEmail = document.getElementById('email').value;
+            const newRole = document.getElementById('role').value;
+            if (initialEmail !== newEmail || initialRole !== newRole) {
+                if (!confirm('Attention : vous modifiez un champ sensible (email ou rôle). Voulez-vous vraiment continuer ?')) {
+                    e.preventDefault();
+                }
+            }
+        });
+    }
 })();
 </script>
 
