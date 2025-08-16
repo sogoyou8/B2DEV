@@ -174,7 +174,7 @@ $prediction = $slope * $future_period + $intercept;
 
 ---
 
-## � Installation Express
+## 🚀 Installation Express
 
 ```bash
 # 1. Cloner et configurer
@@ -216,6 +216,8 @@ GET  http://localhost/B2DEV/admin/api/analytics.php        ✅
 - ✅ Interface de génération et visualisation des prédictions de demande
 - ✅ Algorithme de régression linéaire avec analyse saisonnière
 - ✅ Recommandations automatiques de réapprovisionnement
+- ✅ **Graphique IA responsive et compact** (mise à jour août 2025)
+- ✅ Boutons d'aide "Comment ça marche ?" pour chaque module
 
 ### **Centre de Notifications Intelligent**
 - ✅ Notifications centralisées avec filtres et actions groupées
@@ -308,4 +310,4 @@ Ce projet démontre une **maîtrise complète** des concepts avancés de dévelo
 - ✅ **Interface moderne** responsive et interactive
 - ✅ **Architecture évolutive** pour projets d'entreprise
 
-**Résultat** : Un e-commerce de niveau professionnel prêt pour présentation académique et portfolio ! 🚀
+**Résultat** : Un e-commerce de niveau professionnel prêt pour présentation académique et portfolio !

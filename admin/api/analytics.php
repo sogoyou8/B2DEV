@@ -11,7 +11,7 @@ class Analytics {
     // === MÉTRIQUES PRINCIPALES ===
     
     public function getTopProducts($days = 30, $limit = 10) {
-        return $this->executeWithCache(__METHOD__ . "_${days}_${limit}", "
+        return $this->executeWithCache(__METHOD__ . "_{$days}_{$limit}", "
             SELECT 
                 i.name,
                 i.id,
@@ -47,7 +47,7 @@ class Analytics {
             default => '12 MONTH'
         };
         
-        return $this->executeWithCache(__METHOD__ . "_${period}", "
+        return $this->executeWithCache(__METHOD__ . "_{$period}", "
             SELECT 
                 DATE_FORMAT(o.order_date, ?) as period,
                 COUNT(DISTINCT o.id) as orders_count,
@@ -65,7 +65,7 @@ class Analytics {
     }
     
     public function getCustomerAnalysis($days = 30) {
-        return $this->executeWithCache(__METHOD__ . "_${days}", "
+        return $this->executeWithCache(__METHOD__ . "_{$days}", "
             SELECT 
                 COUNT(DISTINCT u.id) as total_customers,
                 COUNT(DISTINCT CASE WHEN o.order_date >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN u.id END) as active_customers,
@@ -111,14 +111,14 @@ class Analytics {
             default => 5000
         };
         
-        $orders = $this->executeWithCache(__METHOD__ . "_orders_${days}", "
+        $orders = $this->executeWithCache(__METHOD__ . "_orders_{$days}", "
             SELECT COUNT(*) 
             FROM orders 
             WHERE order_date >= DATE_SUB(NOW(), INTERVAL ? DAY)
               AND status IN ('delivered', 'shipped', 'processing')
         ", [$days]);
-        
-        $cart_additions = $this->executeWithCache(__METHOD__ . "_cart_${days}", "
+
+        $cart_additions = $this->executeWithCache(__METHOD__ . "_cart_{$days}", "
             SELECT COUNT(DISTINCT user_id) 
             FROM cart
         ");
@@ -139,7 +139,7 @@ class Analytics {
     // === ANALYSES AVANCÉES ===
     
     public function getProductPerformance($item_id, $days = 90) {
-        return $this->executeWithCache(__METHOD__ . "_${item_id}_${days}", "
+        return $this->executeWithCache(__METHOD__ . "_{$item_id}_{$days}", "
             SELECT 
                 i.name,
                 i.price as current_price,

@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 if (session_status() == PHP_SESSION_NONE) session_start();
 if (!isset($_SESSION['admin_logged_in'])) {
     header("Location: admin_login.php");
@@ -29,8 +32,22 @@ class AdvancedPredictionEngine {
         ");
         $stmt->execute([$item_id, $months]);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        if (count($data) < 3) return ['prediction' => 0, 'confidence' => 0];
+
+        // MODIFIE : gestion données insuffisantes
+        if (count($data) < 3 && count($data) > 0) {
+            // Prédiction possible mais confiance faible
+            $predictions = $this->polynomialRegression($data);
+            $seasonal_factor = $this->calculateSeasonality($data);
+            $base_prediction = end($predictions);
+            $final_prediction = max(0, round($base_prediction * $seasonal_factor));
+            return [
+                'prediction' => $final_prediction,
+                'confidence' => 0,
+                'trend' => 'données insuffisantes',
+                'seasonality' => $seasonal_factor
+            ];
+        }
+        if (count($data) < 1) return ['prediction' => 0, 'confidence' => 0, 'trend' => 'stable', 'seasonality' => 1.0];
         
         // Régression polynomiale pour tendances saisonnières
         $predictions = $this->polynomialRegression($data);
@@ -68,7 +85,17 @@ class AdvancedPredictionEngine {
             $sumX2 += $x * $x;
         }
         
-        $slope = ($n * $sumXY - $sumX * $sumY) / ($n * $sumX2 - $sumX * $sumX);
+        $denominator = ($n * $sumX2 - $sumX * $sumX);
+        if ($denominator == 0) {
+            // Cas: pas assez de points ou tous identiques, on répète la dernière valeur
+            $last = $data[$n-1]['quantity'] ?? 0;
+            for ($i = 1; $i <= $n + 3; $i++) {
+                $predictions[] = $last;
+            }
+            return $predictions;
+        }
+        
+        $slope = ($n * $sumXY - $sumX * $sumY) / $denominator;
         $intercept = ($sumY - $slope * $sumX) / $n;
         
         // Générer prédictions
@@ -137,19 +164,19 @@ class AdvancedPredictionEngine {
         return 'stable';
     }
     
-    public function generateAllPredictions() {
-        // Récupérer tous les produits avec ventes
+    public function generateAllPredictions($months = 6) {
+        // Inclure produits avec stock nul
         $items = $this->pdo->query("
             SELECT DISTINCT i.id, i.name, i.stock, i.stock_alert_threshold
             FROM items i 
             JOIN order_details od ON i.id = od.item_id
-            WHERE i.stock > 0
+            WHERE i.stock >= 0
         ")->fetchAll(PDO::FETCH_ASSOC);
         
         $predictions = [];
         foreach ($items as $item) {
-            $prediction = $this->predictDemand($item['id']);
-            if ($prediction['prediction'] > 0) {
+            $prediction = $this->predictDemand($item['id'], $months);
+            if ($prediction['prediction'] > 0 || $item['stock'] == 0) {
                 $predictions[] = [
                     'item_id' => $item['id'],
                     'name' => $item['name'],
@@ -174,6 +201,13 @@ class AdvancedPredictionEngine {
         $predicted_demand = $prediction['prediction'];
         $confidence = $prediction['confidence'];
         
+        if ($current_stock == 0) {
+            return [
+                'action' => 'Rupture de stock',
+                'priority' => 'critical',
+                'message' => "Stock épuisé !"
+            ];
+        }
         if ($predicted_demand > $current_stock * 2) {
             return [
                 'action' => 'URGENT: Réapprovisionner',
@@ -223,14 +257,27 @@ $engine = new AdvancedPredictionEngine($pdo);
 $predictions = [];
 $processing = false;
 
+// Récupérer la date de génération la plus récente
+$date_generation = null;
+$date_generation_query = $pdo->query("
+    SELECT MAX(created_at) as last_gen
+    FROM previsions
+    WHERE date_prevision = DATE_FORMAT(DATE_ADD(NOW(), INTERVAL 1 MONTH), '%Y-%m-01')
+");
+$date_generation = $date_generation_query->fetchColumn();
+
+// Choix de la période d'analyse
+$periode = isset($_POST['periode']) ? intval($_POST['periode']) : 6;
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
     $processing = true;
-    $predictions = $engine->generateAllPredictions();
+    $predictions = $engine->generateAllPredictions($periode);
     $_SESSION['success_message'] = "Prédictions IA générées avec succès !";
     
     // Notification
     $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
     $stmt->execute(['admin_action', 'Prédictions IA générées par ' . $_SESSION['admin_name']]);
+    $processing = false;
 } else {
     // Charger prédictions existantes
     $predictions = $pdo->query("
@@ -255,18 +302,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
                 <div>
                     <h2><i class="bi bi-robot me-2 text-success"></i>Prédictions IA Avancées</h2>
                     <p class="text-muted">Algorithme de Machine Learning avec analyse saisonnière</p>
+                    <div class="alert alert-warning mt-2" role="alert">
+                        Attention : certaines prédictions sont basées sur un historique de ventes insuffisant ou un stock nul. Les scores de confiance sont faibles dans ce cas.
+                    </div>
+                    <?php if ($date_generation): ?>
+                        <div class="alert alert-info mb-3">
+                            Dernière génération IA : <strong><?php echo date('d/m/Y H:i', strtotime($date_generation)); ?></strong>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <div>
                     <form method="post" class="d-inline">
+                        <select name="periode" class="form-select d-inline w-auto">
+                            <option value="3" <?php if($periode==3) echo 'selected'; ?>>3 mois</option>
+                            <option value="6" <?php if($periode==6) echo 'selected'; ?>>6 mois</option>
+                            <option value="12" <?php if($periode==12) echo 'selected'; ?>>12 mois</option>
+                        </select>
                         <button type="submit" name="generate" class="btn btn-success <?php echo $processing ? 'disabled' : ''; ?>">
                             <?php if ($processing): ?>
                                 <span class="spinner-border spinner-border-sm me-1"></span>Génération...
                             <?php else: ?>
-                                <i class="bi bi-gear me-1"></i>Générer Prédictions
+                                <i class="bi bi-arrow-repeat me-1"></i>Rafraîchir la prédiction IA
                             <?php endif; ?>
                         </button>
                     </form>
-                    <a href="../#README.md" class="btn btn-outline-info ms-2">
+                    <a href="prediction_history.php" class="btn btn-outline-secondary ms-2">
+                        <i class="bi bi-clock-history me-1"></i>Historique des prévisions
+                    </a>
+                    <a href="how_it_works.php?page=prediction" class="btn btn-outline-info ms-2">
                         <i class="bi bi-info-circle me-1"></i>Comment ça marche ?
                     </a>
                 </div>
@@ -343,6 +406,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
                                                         ?>" style="width: <?php echo $pred['confidence'] ?? 0; ?>%"></div>
                                                     </div>
                                                     <small><?php echo $pred['confidence'] ?? 0; ?>%</small>
+                                                    <?php if ($pred['trend'] === 'données insuffisantes'): ?>
+                                                        <span class="badge bg-warning ms-2">Données insuffisantes</span>
+                                                    <?php endif; ?>
                                                 </div>
                                             </td>
                                             <td>
@@ -350,6 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
                                                     echo match($pred['trend'] ?? 'stable') {
                                                         'hausse' => 'success',
                                                         'baisse' => 'danger',
+                                                        'données insuffisantes' => 'warning',
                                                         default => 'secondary'
                                                     };
                                                 ?>">
@@ -357,6 +424,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
                                                         echo match($pred['trend'] ?? 'stable') {
                                                             'hausse' => 'up',
                                                             'baisse' => 'down',
+                                                            'données insuffisantes' => 'right',
                                                             default => 'right'
                                                         };
                                                     ?>"></i>
@@ -367,8 +435,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
                                                 <?php 
                                                 $current = $pred['current_stock'] ?? 0;
                                                 $predicted = $pred['prediction'];
+                                                $rec = $pred['recommendation']['action'] ?? '';
                                                 ?>
-                                                <?php if ($predicted > $current * 2): ?>
+                                                <?php if ($rec === 'Rupture de stock'): ?>
+                                                    <span class="badge bg-danger">Rupture de stock</span>
+                                                <?php elseif ($predicted > $current * 2): ?>
                                                     <span class="badge bg-danger">URGENT: Réapprovisionner</span>
                                                 <?php elseif ($predicted > $current): ?>
                                                     <span class="badge bg-warning">Réapprovisionner</span>
@@ -425,4 +496,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
 }
 </style>
 
-<?php include 'includes/footer.php'; ?>
+<?php include 'includes/footer.php';

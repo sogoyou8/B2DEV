@@ -303,9 +303,9 @@ $previsions_data = $pdo->query("
                 <div class="card-header bg-success text-white">
                     <h5 class="mb-0"><i class="bi bi-robot me-2"></i>Prédictions IA - Mois Prochain</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="height:320px;display:flex;align-items:center;justify-content:center;">
                     <?php if ($previsions_data): ?>
-                        <canvas id="previsionChart"></canvas>
+                        <canvas id="previsionChart" style="max-height:260px;max-width:100%;"></canvas>
                         <div class="mt-3">
                             <small class="text-muted">
                                 <i class="bi bi-info-circle me-1"></i>
@@ -566,6 +566,16 @@ $previsions_data = $pdo->query("
     opacity: 0;
     animation: fadeInUp 0.6s ease forwards;
 }
+
+/* ...existing code... */
+#previsionChart {
+    max-height: 260px;
+    width: 100% !important;
+    height: 260px !important;
+    margin: 0 auto;
+    display: block;
+}
+/* ...existing code... */
 
 .stats-card:nth-child(1) { animation-delay: 0.1s; }
 .stats-card:nth-child(2) { animation-delay: 0.2s; }
