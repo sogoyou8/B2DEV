@@ -114,194 +114,192 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 include 'includes/header.php';
 ?>
 
-<main class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow">
-                <div class="card-header bg-primary text-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">
-                            <i class="bi bi-person-fill-gear me-2"></i>Modifier l'utilisateur
-                        </h4>
-                        <a href="list_users.php" class="btn btn-outline-light btn-sm">
-                            <i class="bi bi-arrow-left me-1"></i>Retour à la liste
-                        </a>
-                    </div>
-                </div>
-                
-                <div class="card-body">
-                    <!-- Affichage des erreurs -->
-                    <?php if (isset($_SESSION['errors']) && is_array($_SESSION['errors'])): ?>
-                        <div class="alert alert-danger alert-dismissible fade show">
-                            <i class="bi bi-exclamation-triangle me-2"></i>
-                            <strong>Erreurs détectées :</strong>
-                            <ul class="mb-0 mt-2">
-                                <?php foreach ($_SESSION['errors'] as $error): ?>
-                                    <li><?php echo htmlspecialchars($error); ?></li>
-                                <?php endforeach; ?>
-                            </ul>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                        <?php unset($_SESSION['errors']); ?>
-                    <?php endif; ?>
-                    
-                    <!-- Informations utilisateur actuel -->
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle me-2"></i>
-                        <strong>Modification de :</strong> <?php echo htmlspecialchars($user['name'] ?? 'Utilisateur inconnu'); ?> 
-                        (ID: <?php echo $user['id'] ?? 'N/A'; ?>) - 
-                        Créé le 
-                        <?php
-                        if (!empty($user['created_at']) && $user['created_at'] !== '0000-00-00 00:00:00') {
-                            echo date('d/m/Y H:i', strtotime($user['created_at']));
-                        } else {
-                            echo 'Date inconnue';
-                        }
-                        ?>
-                    </div>
-                    
-                    <!-- Formulaire -->
-                    <form action="edit_user.php?id=<?php echo $id; ?>" method="post" class="needs-validation" novalidate>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="name" class="form-label">
-                                        <i class="bi bi-person me-1"></i>Nom complet *
-                                    </label>
-                                    <input type="text" 
-                                           name="name" 
-                                           id="name" 
-                                           class="form-control" 
-                                           value="<?php echo htmlspecialchars($user['name'] ?? ''); ?>" 
-                                           required
-                                           minlength="2"
-                                           maxlength="100">
-                                    <div class="invalid-feedback">
-                                        Veuillez saisir un nom valide (2-100 caractères).
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="email" class="form-label">
-                                        <i class="bi bi-envelope me-1"></i>Adresse email *
-                                    </label>
-                                    <input type="email" 
-                                           name="email" 
-                                           id="email" 
-                                           class="form-control" 
-                                           value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" 
-                                           required>
-                                    <div class="invalid-feedback">
-                                        Veuillez saisir une adresse email valide.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="role" class="form-label">
-                                        <i class="bi bi-shield-check me-1"></i>Rôle *
-                                    </label>
-                                    <select name="role" id="role" class="form-select" required>
-                                        <option value="">-- Sélectionner un rôle --</option>
-                                        <option value="user" <?php echo (($user['role'] ?? '') == 'user') ? 'selected' : ''; ?>>
-                                            👤 Utilisateur standard
-                                        </option>
-                                        <option value="admin" <?php echo (($user['role'] ?? '') == 'admin') ? 'selected' : ''; ?>>
-                                            👑 Administrateur
-                                        </option>
-                                    </select>
-                                    <div class="invalid-feedback">
-                                        Veuillez sélectionner un rôle.
-                                    </div>
-                                    <div class="form-text">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        L'administrateur a accès au panneau d'administration.
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">
-                                        <i class="bi bi-calendar me-1"></i>Informations supplémentaires
-                                    </label>
-                                    <div class="card bg-light">
-                                        <div class="card-body py-2">
-                                            <small class="text-muted">
-                                                <strong>ID :</strong> <?php echo $user['id'] ?? 'N/A'; ?><br>
-                                                <strong>Créé :</strong>
-                                                <?php
-                                                if (!empty($user['created_at']) && $user['created_at'] !== '0000-00-00 00:00:00') {
-                                                    echo date('d/m/Y à H:i', strtotime($user['created_at']));
-                                                } else {
-                                                    echo 'Date inconnue';
-                                                }
-                                                ?><br>
-                                                <strong>Rôle actuel :</strong> 
-                                                <span class="badge bg-<?php echo (($user['role'] ?? '') == 'admin') ? 'danger' : 'primary'; ?>">
-                                                    <?php echo ucfirst($user['role'] ?? 'inconnu'); ?>
-                                                </span>
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="d-flex justify-content-between align-items-center mt-4">
-                            <div>
-                                <small class="text-muted">* Champs obligatoires</small>
-                            </div>
-                            <div>
-                                <a href="list_users.php" class="btn btn-outline-secondary me-2">
-                                    <i class="bi bi-x-circle me-1"></i>Annuler
-                                </a>
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-check-circle me-1"></i>Enregistrer les modifications
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+<main class="main-admin">
+    <div class="admin-container">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="bi bi-person-fill-gear me-2"></i>Modifier l'utilisateur
+                    </h4>
+                    <a href="list_users.php" class="btn btn-outline-light btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i>Retour à la liste
+                    </a>
                 </div>
             </div>
             
-            <!-- Carte d'actions supplémentaires -->
-            <div class="card mt-4">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="bi bi-gear me-2"></i>Actions avancées
-                    </h6>
+            <div class="card-body">
+                <!-- Affichage des erreurs -->
+                <?php if (isset($_SESSION['errors']) && is_array($_SESSION['errors'])): ?>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Erreurs détectées :</strong>
+                        <ul class="mb-0 mt-2">
+                            <?php foreach ($_SESSION['errors'] as $error): ?>
+                                <li><?php echo htmlspecialchars($error); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    <?php unset($_SESSION['errors']); ?>
+                <?php endif; ?>
+                
+                <!-- Informations utilisateur actuel -->
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Modification de :</strong> <?php echo htmlspecialchars($user['name'] ?? 'Utilisateur inconnu'); ?> 
+                    (ID: <?php echo $user['id'] ?? 'N/A'; ?>) - 
+                    Créé le 
+                    <?php
+                    if (!empty($user['created_at']) && $user['created_at'] !== '0000-00-00 00:00:00') {
+                        echo date('d/m/Y H:i', strtotime($user['created_at']));
+                    } else {
+                        echo 'Date inconnue';
+                    }
+                    ?>
                 </div>
-                <div class="card-body">
+                
+                <!-- Formulaire -->
+                <form action="edit_user.php?id=<?php echo $id; ?>" method="post" class="needs-validation" novalidate>
                     <div class="row">
-                        <div class="col-md-4">
-                            <a href="reset_user_password.php?id=<?php echo $id; ?>" class="btn btn-outline-warning w-100">
-                                <i class="bi bi-key me-1"></i>Réinitialiser le mot de passe
-                            </a>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">
+                                    <i class="bi bi-person me-1"></i>Nom complet *
+                                </label>
+                                <input type="text" 
+                                       name="name" 
+                                       id="name" 
+                                       class="form-control" 
+                                       value="<?php echo htmlspecialchars($user['name'] ?? ''); ?>" 
+                                       required
+                                       minlength="2"
+                                       maxlength="100">
+                                <div class="invalid-feedback">
+                                    Veuillez saisir un nom valide (2-100 caractères).
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-4">
-                            <a href="user_activity.php?id=<?php echo $id; ?>" class="btn btn-outline-info w-100">
-                                <i class="bi bi-activity me-1"></i>Voir l'activité
-                            </a>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">
+                                    <i class="bi bi-envelope me-1"></i>Adresse email *
+                                </label>
+                                <input type="email" 
+                                       name="email" 
+                                       id="email" 
+                                       class="form-control" 
+                                       value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" 
+                                       required>
+                                <div class="invalid-feedback">
+                                    Veuillez saisir une adresse email valide.
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-4">
-                            <?php if (($user['role'] ?? '') != 'admin' || $id != ($_SESSION['admin_id'] ?? 0)): ?>
-                            <a href="delete_user.php?id=<?php echo $id; ?>" 
-                               class="btn btn-outline-danger w-100"
-                               onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')">
-                                <i class="bi bi-trash me-1"></i>Supprimer
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="role" class="form-label">
+                                    <i class="bi bi-shield-check me-1"></i>Rôle *
+                                </label>
+                                <select name="role" id="role" class="form-select" required>
+                                    <option value="">-- Sélectionner un rôle --</option>
+                                    <option value="user" <?php echo (($user['role'] ?? '') == 'user') ? 'selected' : ''; ?>>
+                                        👤 Utilisateur standard
+                                    </option>
+                                    <option value="admin" <?php echo (($user['role'] ?? '') == 'admin') ? 'selected' : ''; ?>>
+                                        👑 Administrateur
+                                    </option>
+                                </select>
+                                <div class="invalid-feedback">
+                                    Veuillez sélectionner un rôle.
+                                </div>
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    L'administrateur a accès au panneau d'administration.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="bi bi-calendar me-1"></i>Informations supplémentaires
+                                </label>
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">
+                                            <strong>ID :</strong> <?php echo $user['id'] ?? 'N/A'; ?><br>
+                                            <strong>Créé :</strong>
+                                            <?php
+                                            if (!empty($user['created_at']) && $user['created_at'] !== '0000-00-00 00:00:00') {
+                                                echo date('d/m/Y à H:i', strtotime($user['created_at']));
+                                            } else {
+                                                echo 'Date inconnue';
+                                            }
+                                            ?><br>
+                                            <strong>Rôle actuel :</strong> 
+                                            <span class="badge bg-<?php echo (($user['role'] ?? '') == 'admin') ? 'danger' : 'primary'; ?>">
+                                                <?php echo ucfirst($user['role'] ?? 'inconnu'); ?>
+                                            </span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+                        <div>
+                            <small class="text-muted">* Champs obligatoires</small>
+                        </div>
+                        <div>
+                            <a href="list_users.php" class="btn btn-outline-secondary me-2">
+                                <i class="bi bi-x-circle me-1"></i>Annuler
                             </a>
-                            <?php else: ?>
-                            <button class="btn btn-outline-secondary w-100" disabled>
-                                <i class="bi bi-shield-x me-1"></i>Protection admin
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle me-1"></i>Enregistrer les modifications
                             </button>
-                            <?php endif; ?>
                         </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Carte d'actions supplémentaires -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-gear me-2"></i>Actions avancées
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <a href="reset_user_password.php?id=<?php echo $id; ?>" class="btn btn-outline-warning w-100">
+                            <i class="bi bi-key me-1"></i>Réinitialiser le mot de passe
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a href="user_activity.php?id=<?php echo $id; ?>" class="btn btn-outline-info w-100">
+                            <i class="bi bi-activity me-1"></i>Voir l'activité
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <?php if (($user['role'] ?? '') != 'admin' || $id != ($_SESSION['admin_id'] ?? 0)): ?>
+                        <a href="delete_user.php?id=<?php echo $id; ?>" 
+                           class="btn btn-outline-danger w-100"
+                           onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')">
+                            <i class="bi bi-trash me-1"></i>Supprimer
+                        </a>
+                        <?php else: ?>
+                        <button class="btn btn-outline-secondary w-100" disabled>
+                            <i class="bi bi-shield-x me-1"></i>Protection admin
+                        </button>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -388,9 +386,36 @@ include 'includes/header.php';
 </script>
 
 <style>
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #f8f9fa;
+}
+
+.main-admin {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 32px 0 80px 0; /* espace haut et bas, bas pour le footer */
+    min-height: 0;
+}
+
+.admin-container {
+    width: 100%;
+    max-width: 700px;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 32px 24px;
+    margin-bottom: 32px;
+}
+
 .card {
     border: none;
     border-radius: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
 }
 
 .card-header {
