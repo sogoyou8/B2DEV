@@ -14,6 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $user = $query->fetch(PDO::FETCH_ASSOC);
 
     if ($user && password_verify($password, $user['password'])) {
+        session_regenerate_id(true); // Sécurité session
+
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['logged_in'] = true;
 
@@ -52,17 +54,38 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .input-group-append .btn,
+        #togglePassword {
+            height: 40px; /* même hauteur que le champ */
+            min-width: 48px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+            border-top-right-radius: 5px;
+            border-bottom-right-radius: 5px;
+            font-size: 1.2rem;
+        }
+        .input-group .form-control {
+            border-right: 0;
+            height: 40px;
+            font-size: 1rem;
+        }
+    </style>
 </head>
 <body>
     <main class="d-flex justify-content-center align-items-center min-vh-100 bg-light">
         <section class="login-section bg-white p-5 rounded shadow-sm mx-auto" style="max-width: 500px;">
-            <h2 class="h3 mb-4 font-weight-bold">Connexion</h2>
+            <h2 class="h3 mb-4 font-weight-bold text-center">Connexion</h2>
             <?php if (isset($_GET['logout']) && $_GET['logout'] == 'success'): ?>
                 <div class="alert alert-success mb-4">Vous avez été déconnecté avec succès.</div>
             <?php endif; ?>
@@ -76,15 +99,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
                 <div class="form-group">
                     <label for="password">Mot de passe :</label>
-                    <input type="password" name="password" id="password" required class="form-control">
+                    <div class="input-group">
+                        <input type="password" name="password" id="password" required class="form-control">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="togglePassword" tabindex="-1">
+                                <span id="togglePasswordIcon" class="bi bi-eye"></span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-block mt-3">Connexion</button>
             </form>
             <p class="mt-3 text-center">Mot de passe oublié ? <a href="forgot_password.php" class="text-primary">Réinitialiser</a></p>
+            <p class="mt-3 text-center">
+                Pas encore inscrit ? <a href="register.php" class="text-primary">Créer un compte</a>
+            </p>
         </section>
     </main>
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.js"></script>
+    <script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+        const passwordInput = document.getElementById('password');
+        const icon = document.getElementById('togglePasswordIcon');
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.remove('bi-eye');
+            icon.classList.add('bi-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            icon.classList.remove('bi-eye-slash');
+            icon.classList.add('bi-eye');
+        }
+    });
+    </script>
+    <?php include 'includes/footer.php'; ?>
 </body>
 </html>
