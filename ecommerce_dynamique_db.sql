@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Hôte : 127.0.0.1
--- Généré le : sam. 16 août 2025 à 17:30
+-- Généré le : dim. 17 août 2025 à 08:41
 -- Version du serveur : 10.4.32-MariaDB
 -- Version de PHP : 8.2.12
 
@@ -55,7 +55,7 @@ INSERT INTO `favorites` (`id`, `user_id`, `item_id`) VALUES
 (16, 6, 3),
 (17, 6, 1),
 (18, 6, 2),
-(19, 11, 9);
+(20, 16, 1);
 
 -- --------------------------------------------------------
 
@@ -80,9 +80,9 @@ CREATE TABLE `invoice` (
 INSERT INTO `invoice` (`id`, `order_id`, `transaction_date`, `amount`, `billing_address`, `city`, `postal_code`) VALUES
 (2, 7, '2025-03-02 18:31:25', 3137.88, 'Adresse de facturation', 'Ville', 'Code postal'),
 (3, 8, '2025-03-03 02:19:55', 1719.94, '', '', ''),
-(4, 9, '2025-05-26 03:06:58', 110.00, '', '', ''),
 (5, 10, '2025-05-26 07:37:10', 1501.01, '', '', ''),
-(6, 11, '2025-05-26 09:16:34', 32.34, '', '', '');
+(6, 11, '2025-05-26 09:16:34', 32.34, '', '', ''),
+(7, 12, '2025-08-16 20:48:34', 238.98, '', '', '');
 
 -- --------------------------------------------------------
 
@@ -108,7 +108,7 @@ CREATE TABLE `items` (
 --
 
 INSERT INTO `items` (`id`, `name`, `description`, `price`, `stock`, `image`, `created_at`, `updated_at`, `stock_alert_threshold`, `category`) VALUES
-(1, 'nike shox', 'chaussure lifestyle', 219.99, 5, 'images.jpg', '2025-03-01 18:11:43', '2025-08-16 15:22:08', 5, 'chaussure'),
+(1, 'nike shox', 'chaussure lifestyle', 219.99, 4, 'images.jpg', '2025-03-01 18:11:43', '2025-08-16 20:48:30', 5, 'chaussure'),
 (2, 'nike mercurial', 'crampon de football', 198.99, 6, 'images (2).jpg', '2025-03-01 18:14:52', '2025-05-26 07:32:25', 5, 'chaussure'),
 (3, 'Nike United Mercurial Vapor 16 Elite', 'Chaussure de foot à crampons basse FG\r\n', 279.99, 38, 'ZM+VAPOR+16+ELITE+FG+NU1.png', '2025-03-02 10:57:03', '2025-05-26 07:32:18', 5, 'chaussure'),
 (4, 'Nike Mercurial Superfly 10 Elite By You', 'Chaussure de foot montante à crampons pour terrain sec personnalisable\r\n', 309.99, 78, 'custom-nike-mercurial-superfly-10-elite-by-you.png', '2025-03-02 13:51:53', '2025-05-26 07:32:11', 5, 'chaussure'),
@@ -116,7 +116,7 @@ INSERT INTO `items` (`id`, `name`, `description`, `price`, `stock`, `image`, `cr
 (8, 'a', 'a', 0.01, 0, NULL, '2025-03-03 03:23:27', '2025-05-26 07:37:08', 5, 'chaussure'),
 (9, 'mega poster', 'de la taille d\'un mur', 11.00, 15, NULL, '2025-05-24 15:51:23', '2025-05-26 07:31:37', 5, 'poster'),
 (10, 'bille', 'lot de bille', 8.23, 66, NULL, '2025-05-26 07:25:48', '2025-05-26 07:37:06', 11, 'jeu'),
-(11, 'carte yugioh', 'set de 5 exodia le maudit', 18.99, 1, NULL, '2025-05-26 07:29:39', '2025-05-26 07:31:19', 5, 'jeu de carte'),
+(11, 'carte yugioh', 'set de 5 exodia le maudit', 18.99, 0, NULL, '2025-05-26 07:29:39', '2025-08-16 20:48:32', 5, 'jeu de carte'),
 (12, 'arceus', 'carte pokemon arceus', 16.17, 0, NULL, '2025-05-26 07:43:03', '2025-05-26 09:16:32', 1, 'jeu de carte '),
 (13, 'sac nike', 'sac a dos nike', 22.00, 2, NULL, '2025-05-26 07:55:52', '2025-05-26 07:55:52', 1, 'sac de sport'),
 (14, 'aze', 'aze', 84.00, 45, NULL, '2025-08-16 15:28:16', '2025-08-16 15:28:16', 5, 'chaussure');
@@ -222,7 +222,8 @@ INSERT INTO `notifications` (`id`, `type`, `message`, `is_read`, `is_persistent`
 (78, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:43:33', NULL),
 (79, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:47:46', NULL),
 (80, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:47:54', NULL),
-(81, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:57:46', NULL);
+(81, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:57:46', NULL),
+(82, 'important', 'Le produit \'carte yugioh\' est en rupture de stock !', 0, 1, '2025-08-16 20:48:34', NULL);
 
 -- --------------------------------------------------------
 
@@ -243,11 +244,11 @@ CREATE TABLE `orders` (
 --
 
 INSERT INTO `orders` (`id`, `user_id`, `total_price`, `status`, `order_date`) VALUES
-(7, 6, 3137.88, 'pending', '2025-03-02 18:31:25'),
+(7, 6, 3137.88, 'shipped', '2025-03-02 18:31:25'),
 (8, 6, 1719.94, 'pending', '2025-03-03 02:19:55'),
-(9, 11, 110.00, 'pending', '2025-05-26 03:06:56'),
 (10, 12, 1501.01, 'pending', '2025-05-26 07:37:06'),
-(11, 12, 32.34, 'pending', '2025-05-26 09:16:32');
+(11, 12, 32.34, 'pending', '2025-05-26 09:16:32'),
+(12, 16, 238.98, 'pending', '2025-08-16 20:48:30');
 
 -- --------------------------------------------------------
 
@@ -275,11 +276,12 @@ INSERT INTO `order_details` (`id`, `order_id`, `item_id`, `quantity`, `price`) V
 (16, 8, 5, 2, 269.99),
 (17, 8, 4, 2, 309.99),
 (18, 8, 3, 2, 279.99),
-(19, 9, 9, 10, 11.00),
 (20, 10, 10, 22, 8.23),
 (21, 10, 1, 6, 219.99),
 (22, 10, 8, 1, 0.01),
-(23, 11, 12, 2, 16.17);
+(23, 11, 12, 2, 16.17),
+(24, 12, 1, 1, 219.99),
+(25, 12, 11, 1, 18.99);
 
 -- --------------------------------------------------------
 
@@ -400,10 +402,8 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `is_demo`, `created_at`) VALUES
-(1, 'Admin', 'admin@gmail.com', '$2y$10$wQwQwK1k8wQwQwK1k8wQwOQwQwQwK1k8wQwQwK1k8wQwQwK1k8wQwK', 'admin', 0, '2025-02-24 13:01:33'),
 (6, 'yoann', 'yoann@gmail.com', '$2y$10$O645SVVTj0DVRu/i2qcDF.6YSud6AMe/FfGpU9MSPOqdYNw8DuGf.', 'user', 0, '2025-03-02 18:30:08'),
 (10, 'Admin1', 'admin1@gmail.com', '$2y$10$tqMFs.G40/unAEs7Zu4zZuC9ADKYyt71fY6yoUQ..Jj5QkFD09pmS', 'admin', 0, '2025-05-24 15:39:25'),
-(11, 'Toro', 'toro@gmail.com', '$2y$10$HtAhfTsUqOnAv2E7NbdWeehCvVWAIhfqEJS9C5Ac/1U0WjOJljtNK', 'user', 0, '2025-05-26 03:02:43'),
 (12, 'matthias', 'matthias@gmail.com', '$2y$10$yGnIjzhcnpZDlI9Xqlku1OnP7d8VQuxXxSGHbfvZoiM91ra54j1va', 'user', 0, '2025-05-26 07:35:43'),
 (13, 'azerty', 'azerty@gmail.com', '$2y$10$bjaB62THPhNBENRVpoReSO97BnfaR2dj5bFlHC0lyCtoqrrsL8n0m', 'admin', 0, '2025-08-14 03:19:18'),
 (15, 'abc', 'abc@gmail.com', '$2y$10$6j62LmUZ1kHzvNQMAYWQB.JUaXc.KdW8W/hepvNiwCD1EeY2tcTES', 'user', 0, '2025-08-15 11:18:03'),
@@ -499,19 +499,19 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT pour la table `cart`
 --
 ALTER TABLE `cart`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=43;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
 
 --
 -- AUTO_INCREMENT pour la table `favorites`
 --
 ALTER TABLE `favorites`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT pour la table `invoice`
 --
 ALTER TABLE `invoice`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT pour la table `items`
@@ -523,19 +523,19 @@ ALTER TABLE `items`
 -- AUTO_INCREMENT pour la table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=82;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=83;
 
 --
 -- AUTO_INCREMENT pour la table `orders`
 --
 ALTER TABLE `orders`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT pour la table `order_details`
 --
 ALTER TABLE `order_details`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
 
 --
 -- AUTO_INCREMENT pour la table `previsions`
