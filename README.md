@@ -190,8 +190,8 @@ http://localhost/B2DEV
 
 # 4. Accès admin
 http://localhost/B2DEV/admin
-Email: admin1@gmail.com
-Mot de passe: admin1
+Email: admin.demo@gmail.com
+Mot de passe: Admindemomdp!
 ```
 
 ### **Tests API** ✅ FONCTIONNELLES
@@ -205,7 +205,36 @@ GET  http://localhost/B2DEV/admin/api/analytics.php        ✅
 
 ---
 
-## 📱 Captures d'Écran - Fonctionnalités Clés
+## � Mode Démo
+
+Le **Mode Démo** permet de tester toutes les fonctionnalités du site sans modifier les vraies données.
+
+- Un badge jaune "Mode Démo" s'affiche dans le header utilisateur et admin.
+- Un point d'information à côté du badge permet d'accéder à la page d'explication du mode démo.
+
+### Accès au compte démo
+
+- **Email** : admin.demo@gmail.com
+- **Mot de passe** : Admindemomdp!
+
+### Fonctionnement
+
+- Les actions sensibles (ajout, modification, suppression, export CSV, génération IA, etc.) sont désactivées.
+- Toute tentative d'action affiche une alerte "Action désactivée en mode démo".
+- Les boutons d'action sont désactivés ou affichent une alerte.
+- Le badge "Mode Démo" est visible en haut de toutes les pages.
+
+### Objectif
+
+Le mode démo garantit la sécurité et évite toute modification accidentelle lors des démonstrations ou des tests.
+
+### Quitter le mode démo
+
+Pour quitter le mode démo, déconnectez-vous et connectez-vous avec un compte réel (non démo).
+
+---
+
+## �📱 Captures d'Écran - Fonctionnalités Clés
 
 ### **Dashboard Admin - Vue d'ensemble**
 - ✅ Graphiques Chart.js temps réel avec notifications intelligentes
