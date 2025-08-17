@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 include 'includes/header.php';
 include '../includes/db.php';
+include 'admin_demo_guard.php';
 
 // Filtres
 $where = [];
@@ -29,6 +30,11 @@ $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Export CSV
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: prediction_history.php");
+        exit;
+    }
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment;filename=historique_previsions.csv');
     $output = fopen('php://output', 'w');
@@ -57,6 +63,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <a href="how_it_works.php?page=history" class="btn btn-outline-info ms-2">
         <i class="bi bi-info-circle me-1"></i>Comment ça marche ?
     </a>
+    <?php if (isset($_SESSION['error'])): ?>
+        <div class="alert alert-danger mt-3"><?php echo $_SESSION['error']; unset($_SESSION['error']); ?></div>
+    <?php endif; ?>
     <form method="get" class="mb-3 d-flex gap-2">
         <input type="text" name="produit" class="form-control" placeholder="Filtrer par produit" value="<?php echo htmlspecialchars($_GET['produit'] ?? ''); ?>">
         <input type="month" name="mois" class="form-control" value="<?php echo htmlspecialchars($_GET['mois'] ?? ''); ?>">

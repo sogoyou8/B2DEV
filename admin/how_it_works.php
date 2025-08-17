@@ -36,9 +36,21 @@ $back_url = $_SERVER['HTTP_REFERER'] ?? 'prediction.php';
                 <li>Le bouton "Comment ça marche ?" affiche cette explication.</li>
             </ul>
         </div>
+    <?php elseif ($page === 'demo'): ?>
+        <div class="alert alert-warning">
+            <h4><i class="bi bi-exclamation-triangle-fill me-2"></i>Mode Démo</h4>
+            <ul>
+                <li>Le mode démo permet de tester toutes les fonctionnalités sans modifier les vraies données.</li>
+                <li>Les actions sensibles (ajout, modification, suppression, export CSV, génération IA) sont désactivées.</li>
+                <li>Un badge <span class="badge bg-warning text-dark">Mode Démo</span> s’affiche en haut de la page.</li>
+                <li>Pour quitter le mode démo, déconnectez-vous et connectez-vous avec un compte réel.</li>
+            </ul>
+        </div>
     <?php else: ?>
         <div class="alert alert-secondary">
             <h4>Fonctionnalité non documentée</h4>
             <p>Cette page n’a pas encore d’explication dédiée.</p>
         </div>
-    <?php endif;
+    <?php endif; ?>
+</main>
+<?php include 'includes/footer.php'; ?>

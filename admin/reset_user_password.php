@@ -5,6 +5,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     exit;
 }
 include '../includes/db.php';
+include 'admin_demo_guard.php';
 
 $id = $_GET['id'];
 $query = $pdo->prepare("SELECT * FROM users WHERE id = ?");
@@ -21,42 +22,46 @@ $success = '';
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $new_password = $_POST['new_password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
+    if (!guardDemoAdmin()) {
+        $errors[] = "Action désactivée en mode démo.";
+    } else {
+        $new_password = $_POST['new_password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
 
-    // Modalités du mot de passe
-    if (strlen($new_password) < 6) {
-        $errors[] = "Le mot de passe doit contenir au moins 6 caractères.";
-    }
-    if (!preg_match('/[A-Z]/', $new_password)) {
-        $errors[] = "Le mot de passe doit contenir au moins une majuscule.";
-    }
-    if (!preg_match('/[a-z]/', $new_password)) {
-        $errors[] = "Le mot de passe doit contenir au moins une minuscule.";
-    }
-    if (!preg_match('/[0-9]/', $new_password)) {
-        $errors[] = "Le mot de passe doit contenir au moins un chiffre.";
-    }
+        // Modalités du mot de passe
+        if (strlen($new_password) < 6) {
+            $errors[] = "Le mot de passe doit contenir au moins 6 caractères.";
+        }
+        if (!preg_match('/[A-Z]/', $new_password)) {
+            $errors[] = "Le mot de passe doit contenir au moins une majuscule.";
+        }
+        if (!preg_match('/[a-z]/', $new_password)) {
+            $errors[] = "Le mot de passe doit contenir au moins une minuscule.";
+        }
+        if (!preg_match('/[0-9]/', $new_password)) {
+            $errors[] = "Le mot de passe doit contenir au moins un chiffre.";
+        }
 
-    if ($new_password !== $confirm_password) {
-        $errors[] = "Les mots de passe ne correspondent pas.";
-    }
-    if (password_verify($new_password, $user['password'])) {
-        $errors[] = "Le nouveau mot de passe ne doit pas être identique à l'ancien.";
-    }
+        if ($new_password !== $confirm_password) {
+            $errors[] = "Les mots de passe ne correspondent pas.";
+        }
+        if (password_verify($new_password, $user['password'])) {
+            $errors[] = "Le nouveau mot de passe ne doit pas être identique à l'ancien.";
+        }
 
-    if (empty($errors)) {
-        $hashed = password_hash($new_password, PASSWORD_BCRYPT);
-        $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-        $stmt->execute([$hashed, $id]);
-        $success = "Mot de passe réinitialisé avec succès.";
+        if (empty($errors)) {
+            $hashed = password_hash($new_password, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $stmt->execute([$hashed, $id]);
+            $success = "Mot de passe réinitialisé avec succès.";
 
-        // Notification admin
-        $notif = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
-        $notif->execute([
-            'admin_action',
-            "Mot de passe réinitialisé pour l'utilisateur ID $id par admin ID " . ($_SESSION['admin_id'] ?? 'N/A')
-        ]);
+            // Notification admin
+            $notif = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
+            $notif->execute([
+                'admin_action',
+                "Mot de passe réinitialisé pour l'utilisateur ID $id par admin ID " . ($_SESSION['admin_id'] ?? 'N/A')
+            ]);
+        }
     }
 }
 include 'includes/header.php';

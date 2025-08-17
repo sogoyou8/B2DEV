@@ -12,6 +12,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 
 include '../../includes/db.php';
+include '../../admin/admin_demo_guard.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -29,6 +30,11 @@ try {
             break;
             
         case 'POST':
+            if (!guardDemoAdmin()) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Action désactivée en mode démo.']);
+                exit;
+            }
             // Marquer une notification comme lue
             $input = json_decode(file_get_contents('php://input'), true);
             $id = $input['id'] ?? null;
@@ -60,6 +66,11 @@ try {
             break;
             
         case 'DELETE':
+            if (!guardDemoAdmin()) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Action désactivée en mode démo.']);
+                exit;
+            }
             // Marquer toutes les notifications comme lues
             $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1, read_at = NOW() WHERE is_read = 0");
             $success = $stmt->execute();

@@ -7,6 +7,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     exit;
 }
 include '../includes/db.php';
+include 'admin_demo_guard.php';
 
 $id = $_GET['id'];
 
@@ -16,6 +17,11 @@ $query->execute([$id]);
 $order = $query->fetch(PDO::FETCH_ASSOC);
 
 if ($order) {
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: list_orders.php");
+        exit;
+    }
     $query = $pdo->prepare("DELETE FROM orders WHERE id = ?");
     $query->execute([$id]);
     $_SESSION['success'] = "Commande supprimée avec succès.";

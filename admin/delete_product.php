@@ -6,6 +6,8 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
 }
+
+include 'admin_demo_guard.php';
 include '../includes/db.php';
 include 'includes/header.php';
 
@@ -24,6 +26,13 @@ if (!$product) {
         "Échec suppression produit : ID $id introuvable (admin ID " . $_SESSION['admin_id'] . ")"
     ]);
     $_SESSION['error'] = "Produit introuvable.";
+    header("Location: list_products.php");
+    exit;
+}
+
+// Protection démo ici
+if (!guardDemoAdmin()) {
+    $_SESSION['error'] = "Action désactivée en mode démo.";
     header("Location: list_products.php");
     exit;
 }

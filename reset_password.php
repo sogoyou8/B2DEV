@@ -1,6 +1,7 @@
 <?php
 include 'includes/header.php';
 include 'includes/db.php';
+include 'admin/admin_demo_guard.php';
 
 $token = $_GET['token'];
 $query = $pdo->prepare("SELECT * FROM users WHERE reset_token = ? AND reset_token_expiry > NOW()");
@@ -12,17 +13,21 @@ if (!$user) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-
-    if ($password !== $confirm_password) {
-        $error = "Les mots de passe ne correspondent pas.";
+    if (!guardDemoAdmin()) {
+        $error = "Action désactivée en mode démo.";
     } else {
-        $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-        $query = $pdo->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE reset_token = ?");
-        $query->execute([$hashed_password, $token]);
+        $password = $_POST['password'];
+        $confirm_password = $_POST['confirm_password'];
 
-        $success = "Mot de passe réinitialisé avec succès.";
+        if ($password !== $confirm_password) {
+            $error = "Les mots de passe ne correspondent pas.";
+        } else {
+            $hashed_password = password_hash($password, PASSWORD_BCRYPT);
+            $query = $pdo->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE reset_token = ?");
+            $query->execute([$hashed_password, $token]);
+
+            $success = "Mot de passe réinitialisé avec succès.";
+        }
     }
 }
 ?>
@@ -48,4 +53,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </form>
     </section>
 </main>
-<?php include 'includes/footer.php'; ?>
+<?php include 'includes/footer.php';

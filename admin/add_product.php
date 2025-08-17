@@ -6,52 +6,58 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
 }
+
+include 'admin_demo_guard.php';
 include '../includes/db.php';
 include 'includes/header.php';
 include 'includes/footer.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $name = $_POST['name'];
-    $description = $_POST['description'];
-    $price = $_POST['price'];
-    $stock = $_POST['stock'];
-    $category = $_POST['category'];
-    $stock_alert_threshold = $_POST['stock_alert_threshold'];
-    $images = $_FILES['images'];
-    $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-
-    $query = $pdo->prepare("INSERT INTO items (name, description, price, stock, category, stock_alert_threshold) VALUES (?, ?, ?, ?, ?, ?)");
-    if ($query->execute([$name, $description, $price, $stock, $category, $stock_alert_threshold])) {
-        $product_id = $pdo->lastInsertId();
-
-        // Ajouter de nouvelles images
-        for ($i = 0; $i < count($images['name']); $i++) {
-            $image = $images['name'][$i];
-            $image_type = $images['type'][$i];
-
-            if (in_array($image_type, $allowed_types)) {
-                $target = "../assets/images/" . basename($image);
-                if (move_uploaded_file($images['tmp_name'][$i], $target)) {
-                    $query = $pdo->prepare("INSERT INTO product_images (product_id, image, position) VALUES (?, ?, ?)");
-                    $query->execute([$product_id, $image, $i]);
-                }
-            } else {
-                echo "Seuls les fichiers d'image (JPEG, PNG, GIF) sont autorisés.";
-                exit;
-            }
-        }
-
-        $_SESSION['success'] = "Produit ajouté avec succès.";
-        header("Location: list_products.php");
-        exit;
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
     } else {
-        $_SESSION['error'] = "Erreur lors de l'ajout du produit.";
-        // Notification persistante
-        $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
-        $stmt->execute([
-            'error',
-            "Erreur SQL lors de l'ajout d'un produit (admin ID " . $_SESSION['admin_id'] . ")"
-        ]);
+        $name = $_POST['name'];
+        $description = $_POST['description'];
+        $price = $_POST['price'];
+        $stock = $_POST['stock'];
+        $category = $_POST['category'];
+        $stock_alert_threshold = $_POST['stock_alert_threshold'];
+        $images = $_FILES['images'];
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+
+        $query = $pdo->prepare("INSERT INTO items (name, description, price, stock, category, stock_alert_threshold) VALUES (?, ?, ?, ?, ?, ?)");
+        if ($query->execute([$name, $description, $price, $stock, $category, $stock_alert_threshold])) {
+            $product_id = $pdo->lastInsertId();
+
+            // Ajouter de nouvelles images
+            for ($i = 0; $i < count($images['name']); $i++) {
+                $image = $images['name'][$i];
+                $image_type = $images['type'][$i];
+
+                if (in_array($image_type, $allowed_types)) {
+                    $target = "../assets/images/" . basename($image);
+                    if (move_uploaded_file($images['tmp_name'][$i], $target)) {
+                        $query = $pdo->prepare("INSERT INTO product_images (product_id, image, position) VALUES (?, ?, ?)");
+                        $query->execute([$product_id, $image, $i]);
+                    }
+                } else {
+                    echo "Seuls les fichiers d'image (JPEG, PNG, GIF) sont autorisés.";
+                    exit;
+                }
+            }
+
+            $_SESSION['success'] = "Produit ajouté avec succès.";
+            header("Location: list_products.php");
+            exit;
+        } else {
+            $_SESSION['error'] = "Erreur lors de l'ajout du produit.";
+            // Notification persistante
+            $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
+            $stmt->execute([
+                'error',
+                "Erreur SQL lors de l'ajout d'un produit (admin ID " . $_SESSION['admin_id'] . ")"
+            ]);
+        }
     }
 }
 ?>
@@ -69,6 +75,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <main class="container py-4">
         <section class="bg-light p-5 rounded shadow-sm">
             <h2 class="h3 mb-4 font-weight-bold">Ajouter un produit</h2>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="alert alert-danger"><?php echo $_SESSION['error']; unset($_SESSION['error']); ?></div>
+            <?php endif; ?>
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="alert alert-success"><?php echo $_SESSION['success']; unset($_SESSION['success']); ?></div>
+            <?php endif; ?>
             <form action="add_product.php" method="post" enctype="multipart/form-data" onsubmit="return validateImages()">
                 <div class="mb-3">
                     <label for="name" class="form-label">Nom :</label>

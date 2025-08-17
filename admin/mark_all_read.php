@@ -6,6 +6,13 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 
 include '../includes/db.php';
+include 'admin_demo_guard.php';
+
+if (!guardDemoAdmin()) {
+    $_SESSION['error_message'] = "Action désactivée en mode démo.";
+    header("Location: notifications.php");
+    exit;
+}
 
 try {
     // Marquer toutes les notifications comme lues

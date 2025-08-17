@@ -7,50 +7,55 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     exit;
 }
 include '../includes/db.php';
+include 'admin_demo_guard.php';
 
 // INITIALISER LES VARIABLES
 $success = '';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $name = $_POST['name'];
-    $email = $_POST['email'];
-    $password = $_POST['password'];
-    $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-    $role = 'admin';
-
-    // Vérifier si l'email existe déjà
-    $query = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
-    $query->execute([$email]);
-    $email_exists = $query->fetchColumn();
-
-    if ($email_exists) {
-        $error = "L'email $email existe déjà.";
-        // Notification persistante
-        $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
-        $stmt->execute([
-            'error',
-            "Échec création admin : email $email déjà utilisé (admin ID " . $_SESSION['admin_id'] . ")"
-        ]);
+    if (!guardDemoAdmin()) {
+        $error = "Action désactivée en mode démo.";
     } else {
-        $query = $pdo->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)");
-        if ($query->execute([$name, $email, $hashed_password, $role])) {
-            $success = "Administrateur créé avec succès.";
-            
-            // Notification de succès
-            $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
-            $stmt->execute([
-                'admin_action',
-                "Nouvel admin créé : $name ($email) par admin ID " . $_SESSION['admin_id']
-            ]);
-        } else {
-            $error = "Erreur lors de la création de l'administrateur.";
+        $name = $_POST['name'];
+        $email = $_POST['email'];
+        $password = $_POST['password'];
+        $hashed_password = password_hash($password, PASSWORD_BCRYPT);
+        $role = 'admin';
+
+        // Vérifier si l'email existe déjà
+        $query = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
+        $query->execute([$email]);
+        $email_exists = $query->fetchColumn();
+
+        if ($email_exists) {
+            $error = "L'email $email existe déjà.";
             // Notification persistante
             $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
             $stmt->execute([
                 'error',
-                "Erreur SQL lors de la création d'un admin (admin ID " . $_SESSION['admin_id'] . ")"
+                "Échec création admin : email $email déjà utilisé (admin ID " . $_SESSION['admin_id'] . ")"
             ]);
+        } else {
+            $query = $pdo->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)");
+            if ($query->execute([$name, $email, $hashed_password, $role])) {
+                $success = "Administrateur créé avec succès.";
+                
+                // Notification de succès
+                $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
+                $stmt->execute([
+                    'admin_action',
+                    "Nouvel admin créé : $name ($email) par admin ID " . $_SESSION['admin_id']
+                ]);
+            } else {
+                $error = "Erreur lors de la création de l'administrateur.";
+                // Notification persistante
+                $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
+                $stmt->execute([
+                    'error',
+                    "Erreur SQL lors de la création d'un admin (admin ID " . $_SESSION['admin_id'] . ")"
+                ]);
+            }
         }
     }
 }

@@ -9,7 +9,20 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 include '../includes/db.php';
 include 'includes/header.php';
 
+// Affichage des alertes
+if (isset($_SESSION['error'])): ?>
+    <div class="alert alert-danger text-center">
+        <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+    </div>
+<?php endif; ?>
 
+<?php if (isset($_SESSION['success'])): ?>
+    <div class="alert alert-success text-center">
+        <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+    </div>
+<?php endif; ?>
+
+<?php
 $query = $pdo->query("SELECT * FROM items");
 $products = $query->fetchAll(PDO::FETCH_ASSOC);
 ?>

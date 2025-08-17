@@ -8,6 +8,13 @@ if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
 }
 include 'includes/db.php';
 
+// Protection mode démo
+if (!empty($_SESSION['is_demo']) && $_SESSION['is_demo'] == 1) {
+    $_SESSION['demo_error'] = "Action désactivée en mode démo.";
+    header("Location: profile.php");
+    exit;
+}
+
 $user_id = $_SESSION['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -23,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     header("Location: index.php?message=account_deleted");
     exit;
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="fr">

@@ -8,12 +8,18 @@ if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
 }
 include 'includes/db.php';
 include 'includes/header.php';
+include 'admin/admin_demo_guard.php';
 
 $user_id = $_SESSION['user_id'];
 
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    if (!guardDemoAdmin()) {
+        $_SESSION['demo_error'] = "Action désactivée en mode démo.";
+        header("Location: profile.php");
+        exit;
+    }
     $current_password = trim($_POST['current_password']);
     $new_password = trim($_POST['new_password']);
     $confirm_password = trim($_POST['confirm_password']);

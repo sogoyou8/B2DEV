@@ -8,6 +8,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 include '../includes/db.php';
 include 'includes/header.php';
+include 'admin_demo_guard.php';
 
 $id = $_GET['id'];
 $query = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
@@ -27,6 +28,11 @@ if (!$order) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: list_orders.php");
+        exit;
+    }
     $status = $_POST['status'];
 
     $query = $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?");
@@ -49,6 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <main>
         <section>
             <h2>Modifier une commande</h2>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="alert alert-danger text-center">
+                    <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+                </div>
+            <?php endif; ?>
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="alert alert-success text-center">
+                    <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+                </div>
+            <?php endif; ?>
             <form action="edit_order.php?id=<?php echo $id; ?>" method="post">
                 <label for="status">Status :</label>
                 <select name="status" id="status" required>

@@ -8,6 +8,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 include '../includes/db.php';
 include 'includes/header.php';
+include 'admin_demo_guard.php';
 
 $id = $_GET['id'];
 
@@ -24,6 +25,13 @@ if (!$user) {
         "Échec suppression utilisateur : ID $id introuvable (admin ID " . $_SESSION['admin_id'] . ")"
     ]);
     $_SESSION['error'] = "Utilisateur introuvable.";
+    header("Location: list_users.php");
+    exit;
+}
+
+// Protection démo : empêcher la suppression si admin demo
+if (!guardDemoAdmin()) {
+    $_SESSION['error'] = "Action désactivée en mode démo.";
     header("Location: list_users.php");
     exit;
 }

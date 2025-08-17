@@ -6,6 +6,8 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
 }
+
+include 'admin_demo_guard.php';
 include '../includes/db.php';
 include 'includes/header.php';
 
@@ -30,7 +32,13 @@ $query = $pdo->prepare("SELECT * FROM product_images WHERE product_id = ? ORDER 
 $query->execute([$id]);
 $product_images = $query->fetchAll(PDO::FETCH_ASSOC);
 
+// Protection démo sur modification
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_product'])) {
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: edit_product.php?id=$id");
+        exit;
+    }
     $name = $_POST['name'];
     $description = $_POST['description'];
     $price = $_POST['price'];
@@ -86,6 +94,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_product'])) {
     header("Location: list_products.php");
     exit;
 } elseif (isset($_POST['delete_images_submit'])) {
+    // Protection démo sur suppression d'images
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: edit_product.php?id=$id");
+        exit;
+    }
     $delete_images = $_POST['delete_images'];
     foreach ($delete_images as $image_id) {
         $query = $pdo->prepare("SELECT image FROM product_images WHERE id = ?");
@@ -107,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_product'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -125,6 +139,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_product'])) {
     <main class="container py-4">
         <section class="bg-light p-5 rounded shadow-sm">
             <h2 class="h3 mb-4 font-weight-bold">Modifier un produit</h2>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="alert alert-danger text-center">
+                    <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+                </div>
+            <?php endif; ?>
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="alert alert-success text-center">
+                    <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+                </div>
+            <?php endif; ?>
             <form action="edit_product.php?id=<?php echo $id; ?>" method="post" enctype="multipart/form-data">
                 <div class="mb-3">
                     <label for="name" class="form-label">Nom :</label>
@@ -188,4 +212,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_product'])) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<?php include 'includes/footer.php'; ?>
+<?php include 'includes/footer.php';

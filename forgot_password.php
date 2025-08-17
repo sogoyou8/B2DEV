@@ -11,7 +11,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $query->execute([$email]);
     $user = $query->fetch(PDO::FETCH_ASSOC);
 
-    if ($user) {
+    // Protection compte démo
+    if ($user && !empty($user['is_demo']) && $user['is_demo'] == 1) {
+        $message = "La réinitialisation du mot de passe est désactivée pour le compte démo.";
+    } elseif ($user) {
         // Générer un token de réinitialisation
         $token = bin2hex(random_bytes(50));
         $query = $pdo->prepare("UPDATE users SET reset_token = ?, reset_token_expiry = DATE_ADD(NOW(), INTERVAL 1 HOUR) WHERE email = ?");
@@ -44,4 +47,3 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </form>
     </section>
 </main>
-<?php include 'includes/footer.php'; ?>

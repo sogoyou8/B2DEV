@@ -12,6 +12,7 @@ include 'includes/db.php'; // Assure la connexion PDO pour le rôle admin
     <title>E-commerce Dynamique</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 </head>
 <body>
     <header>
@@ -48,4 +49,16 @@ include 'includes/db.php'; // Assure la connexion PDO pour le rôle admin
             <input type="text" name="query" class="form-control mr-sm-2" placeholder="Rechercher des produits">
             <button type="submit" class="btn btn-outline-success">Rechercher</button>
         </form>
+        <?php if (!empty($_SESSION['is_demo']) && $_SESSION['is_demo'] == 1): ?>
+            <div class="mt-2 mb-0 text-center">
+                <span class="badge bg-warning text-dark" style="font-size:1rem;">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i> Mode Démo
+                    <a href="admin/how_it_works.php?page=demo" class="ms-2 text-dark" title="À propos du mode démo">
+                        <i class="bi bi-info-circle"></i>
+                    </a>
+                </span>
+            </div>
+        <?php endif; ?>
     </header>
+</body>
+</html>

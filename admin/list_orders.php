@@ -12,6 +12,19 @@ $query = $pdo->query("SELECT * FROM orders");
 $orders = $query->fetchAll(PDO::FETCH_ASSOC);
 include 'includes/header.php';
 ?>
+
+<?php if (isset($_SESSION['error'])): ?>
+    <div class="alert alert-danger text-center">
+        <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['success'])): ?>
+    <div class="alert alert-success text-center">
+        <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+    </div>
+<?php endif; ?>
+
 <main>
     <section>
         <h2>Liste des commandes</h2>
@@ -51,4 +64,3 @@ include 'includes/header.php';
         }
     }
 </script>
-<?php include 'includes/footer.php'; ?>

@@ -12,6 +12,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 
 include '../includes/db.php';
+include 'admin_demo_guard.php';
 
 // Vérification de l'ID
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
@@ -47,6 +48,11 @@ try {
 
 // Traitement du formulaire
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    if (!guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: edit_user.php?id=$id");
+        exit;
+    }
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $role = $_POST['role'] ?? '';

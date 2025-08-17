@@ -9,7 +9,26 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 include 'includes/header.php';
 include '../includes/db.php';
+include 'admin_demo_guard.php';
 
+// Affichage des alertes
+if (isset($_SESSION['error'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['success_message'])): ?>
+    <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        <?php echo $_SESSION['success_message']; unset($_SESSION['success_message']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
+<?php
 class AdvancedPredictionEngine {
     private $pdo;
     
@@ -270,14 +289,19 @@ $date_generation = $date_generation_query->fetchColumn();
 $periode = isset($_POST['periode']) ? intval($_POST['periode']) : 6;
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
-    $processing = true;
-    $predictions = $engine->generateAllPredictions($periode);
-    $_SESSION['success_message'] = "Prédictions IA générées avec succès !";
-    
-    // Notification
-    $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
-    $stmt->execute(['admin_action', 'Prédictions IA générées par ' . $_SESSION['admin_name']]);
-    $processing = false;
+    if (!guardDemoAdmin()) {
+        // Affiche un message d'erreur et ne lance pas la génération
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+    } else {
+        $processing = true;
+        $predictions = $engine->generateAllPredictions($periode);
+        $_SESSION['success_message'] = "Prédictions IA générées avec succès !";
+        
+        // Notification
+        $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 0)");
+        $stmt->execute(['admin_action', 'Prédictions IA générées par ' . $_SESSION['admin_name']]);
+        $processing = false;
+    }
 } else {
     // Charger prédictions existantes
     $predictions = $pdo->query("
@@ -496,4 +520,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate'])) {
 }
 </style>
 
-<?php include 'includes/footer.php';
+<?php include 'includes/footer.php'; ?>

@@ -29,6 +29,11 @@ $user_name = isset($user['name']) ? $user['name'] : 'Utilisateur';
                 <?php unset($_SESSION['profile_update_success']); ?>
             </div>
         <?php endif; ?>
+        <?php if (isset($_SESSION['demo_error'])): ?>
+            <div class="alert alert-danger mb-4">
+                <?php echo htmlspecialchars($_SESSION['demo_error']); unset($_SESSION['demo_error']); ?>
+            </div>
+        <?php endif; ?>
         <p class="mb-2"><strong>Email :</strong> <?php echo htmlspecialchars($user['email']); ?></p>
         <p class="mb-4"><strong>Date de création :</strong> <?php echo htmlspecialchars($user['created_at']); ?></p>
         
@@ -71,4 +76,3 @@ $user_name = isset($user['name']) ? $user['name'] : 'Utilisateur';
         </form>
     </section>
 </main>
-<?php include 'includes/footer.php'; ?>
