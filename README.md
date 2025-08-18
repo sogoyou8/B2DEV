@@ -234,12 +234,14 @@ Pour quitter le mode démo, déconnectez-vous et connectez-vous avec un compte r
 
 ---
 
-## �📱 Captures d'Écran - Fonctionnalités Clés
+##  Captures d'Écran - Fonctionnalités Clés
 
 ### **Dashboard Admin - Vue d'ensemble**
 - ✅ Graphiques Chart.js temps réel avec notifications intelligentes
 - ✅ Statistiques POO générées dynamiquement  
 - ✅ APIs REST intégrées pour données live
+- ✅ Filtres par période et export CSV sur l’historique des ventes (nouveauté)
+- ✅ Bouton "Voir historique ventes" sur la fiche produit admin
 
 ### **Prédictions IA en Action**
 - ✅ Interface de génération et visualisation des prédictions de demande
@@ -252,11 +254,16 @@ Pour quitter le mode démo, déconnectez-vous et connectez-vous avec un compte r
 - ✅ Notifications centralisées avec filtres et actions groupées
 - ✅ Système de priorité (important, stock, système)
 - ✅ Intégration API pour marquage temps réel
+- ✅ Badge dynamique dans le header admin indiquant le nombre de notifications non lues
+- ✅ Bouton "Tout marquer comme lu" pour les notifications
+- ✅ Notifications persistantes pour les événements critiques (stock, sécurité, actions admin)
+- ✅ Utilisation systématique des toasts/alertes pour le feedback utilisateur
 
 ### **CRUD Produits Avancé**
 - ✅ Gestion complète avec images multiples et édition en ligne
 - ✅ Interface moderne avec validation temps réel
 - ✅ Classes POO pour logique métier
+- ✅ Affichage d’une image par défaut si le produit n’a pas d’image (évite les espaces vides)
 
 ---
 
@@ -265,8 +272,9 @@ Pour quitter le mode démo, déconnectez-vous et connectez-vous avec un compte r
 - **⚡ Temps de chargement** : < 1 seconde (dashboard)
 - **🤖 Prédictions IA** : 2-5 secondes (selon volume)  
 - **📱 Compatibilité** : Mobile/Desktop responsive
-- **🔒 Sécurité** : Authentification, validation, échappement
-- **📈 Évolutivité** : Architecture modulaire POO
+- **🔒 Sécurité** : Authentification, validation, échappement, gestion stricte des rôles et permissions sur toutes les pages
+- **📈 Évolutivité** : Architecture modulaire POO, centralisation des méthodes critiques dans les classes métier
+- **🛡️ Robustesse** : Optimisation des requêtes SQL, validation renforcée des formulaires, gestion des erreurs améliorée
 
 ---
 
