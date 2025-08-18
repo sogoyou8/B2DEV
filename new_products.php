@@ -6,7 +6,7 @@ include 'includes/header.php';
 include 'includes/db.php';
 
 // Récupérez les produits ajoutés au cours des dernières 12 heures
-$query = $pdo->prepare("SELECT * FROM items WHERE created_at >= NOW() - INTERVAL 12 HOUR");
+$query = $pdo->prepare("SELECT * FROM items WHERE created_at >= NOW() - INTERVAL 2 MONTH");
 $query->execute();
 $new_products = $query->fetchAll(PDO::FETCH_ASSOC);
 ?>
