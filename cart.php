@@ -2,10 +2,19 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
-include 'includes/header.php';
+
+// Démarrer le buffering pour éviter "headers already sent" si includes/header.php émet du HTML
+ob_start();
+// Garantit la vidange du buffer à la fin du script (même après exit/fatal)
+register_shutdown_function(function () {
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
+});
+
 include 'includes/db.php';
 
-// Vérifiez si l'utilisateur est connecté
+// Vérifiez si l'utilisateur est connecté ; rediriger avant d'inclure le header qui émet du HTML
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
@@ -36,6 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     header("Location: cart.php");
     exit;
 }
+
+// Inclure le header après les éventuelles redirections
+include 'includes/header.php';
 
 $query = $pdo->prepare("SELECT items.*, cart.quantity FROM items JOIN cart ON items.id = cart.item_id WHERE cart.user_id = ?");
 $query->execute([$user_id]);
@@ -112,4 +124,4 @@ foreach ($items as $item) {
         <?php endif; ?>
     </section>
 </main>
-<?php include 'includes/footer.php'; ?>
+<?php include 'includes/footer.php';

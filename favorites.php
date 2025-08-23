@@ -2,6 +2,15 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+// Démarrer le buffering pour éviter "headers already sent" si includes/header.php émet du HTML
+ob_start();
+// Garantit la vidange du buffer à la fin du script
+register_shutdown_function(function () {
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
+});
+
 include 'includes/header.php';
 include 'includes/db.php';
 
