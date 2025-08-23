@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Hôte : 127.0.0.1
--- Généré le : dim. 17 août 2025 à 08:41
+-- Généré le : lun. 18 août 2025 à 13:05
 -- Version du serveur : 10.4.32-MariaDB
 -- Version de PHP : 8.2.12
 
@@ -119,7 +119,9 @@ INSERT INTO `items` (`id`, `name`, `description`, `price`, `stock`, `image`, `cr
 (11, 'carte yugioh', 'set de 5 exodia le maudit', 18.99, 0, NULL, '2025-05-26 07:29:39', '2025-08-16 20:48:32', 5, 'jeu de carte'),
 (12, 'arceus', 'carte pokemon arceus', 16.17, 0, NULL, '2025-05-26 07:43:03', '2025-05-26 09:16:32', 1, 'jeu de carte '),
 (13, 'sac nike', 'sac a dos nike', 22.00, 2, NULL, '2025-05-26 07:55:52', '2025-05-26 07:55:52', 1, 'sac de sport'),
-(14, 'aze', 'aze', 84.00, 45, NULL, '2025-08-16 15:28:16', '2025-08-16 15:28:16', 5, 'chaussure');
+(14, 'aze', 'aze', 84.00, 45, NULL, '2025-08-16 15:28:16', '2025-08-16 15:28:16', 5, 'chaussure'),
+(15, 'oye', 'zeaj', 451.00, 44, NULL, '2025-08-17 16:39:32', '2025-08-17 16:39:32', 5, 'poster'),
+(16, 'tytfgchj', 'jkugfyt\r\n', 127.65, 25, NULL, '2025-08-18 03:13:51', '2025-08-18 08:30:44', 5, 'poster');
 
 -- --------------------------------------------------------
 
@@ -223,7 +225,11 @@ INSERT INTO `notifications` (`id`, `type`, `message`, `is_read`, `is_persistent`
 (79, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:47:46', NULL),
 (80, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:47:54', NULL),
 (81, 'admin_action', 'Prédictions IA générées par azerty', 0, 0, '2025-08-16 12:57:46', NULL),
-(82, 'important', 'Le produit \'carte yugioh\' est en rupture de stock !', 0, 1, '2025-08-16 20:48:34', NULL);
+(82, 'important', 'Le produit \'carte yugioh\' est en rupture de stock !', 0, 1, '2025-08-16 20:48:34', NULL),
+(83, 'info', 'Produit \'\' supprimé par azerty', 0, 0, '2025-08-18 03:27:59', NULL),
+(84, 'admin_action', 'Mise à jour en masse : 1 modification(s) appliquée(s) par azerty', 0, 0, '2025-08-18 07:04:53', NULL),
+(85, 'admin_action', 'Mise à jour en masse : 1 modification(s) appliquée(s) par azerty', 0, 0, '2025-08-18 08:30:19', NULL),
+(86, 'admin_action', 'Mise à jour en masse : 1 modification(s) appliquée(s) par azerty', 0, 0, '2025-08-18 08:30:44', NULL);
 
 -- --------------------------------------------------------
 
@@ -324,50 +330,56 @@ CREATE TABLE `product_images` (
   `id` int(11) NOT NULL,
   `product_id` int(11) NOT NULL,
   `image` varchar(255) NOT NULL,
-  `position` int(11) DEFAULT 0
+  `position` int(11) DEFAULT 0,
+  `caption` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Déchargement des données de la table `product_images`
 --
 
-INSERT INTO `product_images` (`id`, `product_id`, `image`, `position`) VALUES
-(8, 8, 'PHANTOM+GX+II+ELITE+FG+EH.png', 0),
-(10, 9, 'téléchargement.jpg', 0),
-(13, 1, 'LEGEND+10+CLUB+FG_MG (3).png', 2),
-(14, 1, 'LEGEND+10+CLUB+FG_MG (4).png', 3),
-(15, 1, 'LEGEND+10+CLUB+FG_MG (5).png', 4),
-(16, 1, 'LEGEND+10+CLUB+FG_MG (6).png', 5),
-(17, 1, 'LEGEND+10+CLUB+FG_MG (7).png', 6),
-(18, 1, 'LEGEND+10+CLUB+FG_MG (8).png', 7),
-(19, 1, 'LEGEND+10+CLUB+FG_MG.png', 8),
-(20, 5, 'PHANTOM+GX+II+ELITE+FG+EH (3).png', 0),
-(21, 5, 'PHANTOM+GX+II+ELITE+FG+EH (1).png', 1),
-(22, 5, 'PHANTOM+GX+II+ELITE+FG+EH (2).png', 2),
-(23, 5, 'PHANTOM+GX+II+ELITE+FG+EH.png', 3),
-(24, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (1).png', 0),
-(25, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (2).png', 1),
-(26, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (3).png', 2),
-(27, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (4).png', 3),
-(28, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (5).png', 4),
-(29, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (6).png', 5),
-(30, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (7).png', 6),
-(31, 2, 'custom-nike-mercurial-superfly-10-academy-by-you.png', 7),
-(34, 3, 'PHANTOM+LUNA+II+ELITE+FG (3).png', 2),
-(35, 3, 'PHANTOM+LUNA+II+ELITE+FG.png', 3),
-(36, 3, 'PHANTOM+LUNA+II+ELITE+FG (1).png', 2),
-(37, 3, 'PHANTOM+LUNA+II+ELITE+FG (2).png', 3),
-(40, 4, 'PHANTOM+GX+II+ELITE+FG (3).png', 0),
-(41, 4, 'PHANTOM+GX+II+ELITE+FG (1).png', 1),
-(42, 4, 'PHANTOM+GX+II+ELITE+FG (2).png', 2),
-(43, 4, 'PHANTOM+GX+II+ELITE+FG.png', 3),
-(44, 10, 'billes-colorees-mega-pack-ref_NC1101_2.jpg', 0),
-(45, 10, 'images.jpg', 1),
-(46, 10, 'téléchargement.jpg', 2),
-(47, 11, 'images (1).jpg', 0),
-(48, 12, 'images (2).jpg', 0),
-(49, 13, '2535112-full_product.jpg', 0),
-(50, 14, 'IMG_4380.png', 0);
+INSERT INTO `product_images` (`id`, `product_id`, `image`, `position`, `caption`) VALUES
+(8, 8, 'PHANTOM+GX+II+ELITE+FG+EH.png', 0, NULL),
+(10, 9, 'téléchargement.jpg', 0, NULL),
+(13, 1, 'LEGEND+10+CLUB+FG_MG (3).png', 2, NULL),
+(14, 1, 'LEGEND+10+CLUB+FG_MG (4).png', 3, NULL),
+(15, 1, 'LEGEND+10+CLUB+FG_MG (5).png', 4, NULL),
+(16, 1, 'LEGEND+10+CLUB+FG_MG (6).png', 5, NULL),
+(17, 1, 'LEGEND+10+CLUB+FG_MG (7).png', 6, NULL),
+(18, 1, 'LEGEND+10+CLUB+FG_MG (8).png', 7, NULL),
+(19, 1, 'LEGEND+10+CLUB+FG_MG.png', 8, NULL),
+(20, 5, 'PHANTOM+GX+II+ELITE+FG+EH (3).png', 0, NULL),
+(21, 5, 'PHANTOM+GX+II+ELITE+FG+EH (1).png', 1, NULL),
+(22, 5, 'PHANTOM+GX+II+ELITE+FG+EH (2).png', 2, NULL),
+(23, 5, 'PHANTOM+GX+II+ELITE+FG+EH.png', 3, NULL),
+(24, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (1).png', 0, NULL),
+(25, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (2).png', 1, NULL),
+(26, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (3).png', 2, NULL),
+(27, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (4).png', 3, NULL),
+(28, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (5).png', 4, NULL),
+(29, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (6).png', 5, NULL),
+(30, 2, 'custom-nike-mercurial-superfly-10-academy-by-you (7).png', 6, NULL),
+(31, 2, 'custom-nike-mercurial-superfly-10-academy-by-you.png', 7, NULL),
+(34, 3, 'PHANTOM+LUNA+II+ELITE+FG (3).png', 2, NULL),
+(35, 3, 'PHANTOM+LUNA+II+ELITE+FG.png', 3, NULL),
+(36, 3, 'PHANTOM+LUNA+II+ELITE+FG (1).png', 2, NULL),
+(37, 3, 'PHANTOM+LUNA+II+ELITE+FG (2).png', 3, NULL),
+(40, 4, 'PHANTOM+GX+II+ELITE+FG (3).png', 0, NULL),
+(41, 4, 'PHANTOM+GX+II+ELITE+FG (1).png', 1, NULL),
+(42, 4, 'PHANTOM+GX+II+ELITE+FG (2).png', 2, NULL),
+(43, 4, 'PHANTOM+GX+II+ELITE+FG.png', 3, NULL),
+(44, 10, 'billes-colorees-mega-pack-ref_NC1101_2.jpg', 0, NULL),
+(45, 10, 'images.jpg', 1, NULL),
+(46, 10, 'téléchargement.jpg', 2, NULL),
+(47, 11, 'images (1).jpg', 0, NULL),
+(48, 12, 'images (2).jpg', 0, NULL),
+(49, 13, '2535112-full_product.jpg', 0, NULL),
+(50, 14, 'IMG_4380.png', 0, NULL),
+(51, 14, 'IMG_4381.png', 1, NULL),
+(55, 16, 'IMG_4380.png', 1, 'mega'),
+(56, 16, 'IMG_4381.png', 0, ''),
+(57, 16, 'IMG_4382.png', 2, ''),
+(62, 16, 'p16_68a2a62da41c8.png', 3, '');
 
 -- --------------------------------------------------------
 
@@ -517,13 +529,13 @@ ALTER TABLE `invoice`
 -- AUTO_INCREMENT pour la table `items`
 --
 ALTER TABLE `items`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT pour la table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=83;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=87;
 
 --
 -- AUTO_INCREMENT pour la table `orders`
@@ -547,7 +559,7 @@ ALTER TABLE `previsions`
 -- AUTO_INCREMENT pour la table `product_images`
 --
 ALTER TABLE `product_images`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=51;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=63;
 
 --
 -- AUTO_INCREMENT pour la table `stock`

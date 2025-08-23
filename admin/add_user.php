@@ -11,6 +11,11 @@ include_once '../includes/db.php';
 include_once 'admin_demo_guard.php';
 include_once 'includes/header.php';
 
+// Ensure admin visual style (some headers may omit)
+?>
+<script>try { document.body.classList.add('admin-page'); } catch (e) {}</script>
+<?php
+
 // Générer token CSRF si absent
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -19,6 +24,7 @@ if (empty($_SESSION['csrf_token'])) {
 $errors = [];
 $success = '';
 
+// Traitement POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // protection mode démo
@@ -39,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $role = in_array($_POST['role'] ?? 'user', ['user','admin']) ? $_POST['role'] : 'user';
 
-    // Validations
+    // Server-side validations
     if ($name === '' || mb_strlen($name) < 2) {
         $errors[] = "Le nom est requis (min 2 caractères).";
     }
@@ -69,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ins = $pdo->prepare("INSERT INTO users (name, email, password, role, created_at) VALUES (?, ?, ?, ?, NOW())");
             $ok = $ins->execute([$name, $email, $hashed, $role]);
             if ($ok) {
-                // Notification de création (non-persistante)
+                // Notification non-persistante (journal)
                 try {
                     $note = $pdo->prepare("INSERT INTO notifications (`type`,`message`,`is_persistent`) VALUES (?, ?, 0)");
                     $note->execute([
@@ -96,77 +102,177 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['errors'] = $errors;
     }
 }
+
+// Page HTML - harmonisée avec le style des listes admin (list_products/list_orders/list_users)
 ?>
-
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin - Ajouter un utilisateur</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <style>
+        :root{
+            --card-radius:12px;
+            --muted:#6c757d;
+            --bg-gradient-1:#f8fbff;
+            --bg-gradient-2:#eef7ff;
+            --accent:#0d6efd;
+            --accent-2:#6610f2;
+        }
+        body.admin-page {
+            background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
+        }
+        .panel-card {
+            border-radius: var(--card-radius);
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
+            box-shadow: 0 12px 36px rgba(3,37,76,0.06);
+            padding: 1.25rem;
+        }
+        .page-title h2 {
+            margin:0;
+            font-weight:700;
+            color:var(--accent-2);
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .help-note { color:var(--muted); font-size:.95rem; }
+        .btn-round { border-radius:8px; }
+        .form-card { border-radius:12px; }
+    </style>
+</head>
+<body class="admin-page">
 <main class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-md-7">
-            <div class="card shadow-sm">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-person-plus me-2"></i>Ajouter un utilisateur</h5>
-                    <a href="list_users.php" class="btn btn-sm btn-outline-secondary">Retour à la liste</a>
+    <section class="panel-card mb-4">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <div class="page-title">
+                    <h2 class="h4 mb-0">Ajouter un utilisateur</h2>
                 </div>
-                <div class="card-body">
+                <div class="small text-muted">Créez un compte utilisateur — actions sensibles protégées en mode démo.</div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="list_users.php" class="btn btn-outline-secondary btn-sm btn-round">Retour à la liste</a>
+            </div>
+        </div>
 
-                    <?php if (!empty($_SESSION['error'])): ?>
-                        <div class="alert alert-danger"><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></div>
-                    <?php endif; ?>
+        <?php if (!empty($_SESSION['error'])): ?>
+            <div class="alert alert-danger text-center shadow-sm mb-3"><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></div>
+        <?php endif; ?>
 
-                    <?php if (!empty($_SESSION['success'])): ?>
-                        <div class="alert alert-success"><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></div>
-                    <?php endif; ?>
+        <?php if (!empty($_SESSION['success'])): ?>
+            <div class="alert alert-success text-center shadow-sm mb-3"><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></div>
+        <?php endif; ?>
 
-                    <?php if (!empty($_SESSION['errors'])): ?>
-                        <div class="alert alert-danger">
-                            <ul class="mb-0">
-                                <?php foreach ($_SESSION['errors'] as $e): ?>
-                                    <li><?php echo htmlspecialchars($e); ?></li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </div>
-                        <?php unset($_SESSION['errors']); ?>
-                    <?php endif; ?>
+        <?php if (!empty($_SESSION['errors'])): ?>
+            <div class="alert alert-danger">
+                <ul class="mb-0">
+                    <?php foreach ($_SESSION['errors'] as $e): ?>
+                        <li><?php echo htmlspecialchars($e); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+            <?php unset($_SESSION['errors']); ?>
+        <?php endif; ?>
 
-                    <form method="post" novalidate>
-                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
-                        <div class="mb-3">
-                            <label for="name" class="form-label">Nom</label>
-                            <input id="name" name="name" class="form-control" required value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>">
-                        </div>
+        <div class="row gx-4">
+            <div class="col-12 col-lg-7">
+                <div class="card form-card shadow-sm mb-3">
+                    <div class="card-body">
+                        <form method="post" id="addUserForm" novalidate>
+                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
 
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <input id="email" name="email" type="email" class="form-control" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
-                        </div>
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Nom</label>
+                                <input id="name" name="name" class="form-control" required minlength="2" value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>">
+                            </div>
 
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Mot de passe</label>
-                            <input id="password" name="password" type="password" class="form-control" required minlength="6" autocomplete="new-password">
-                            <div class="form-text">Minimum 6 caractères.</div>
-                        </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <input id="email" name="email" class="form-control" type="email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+                            </div>
 
-                        <div class="mb-3">
-                            <label for="role" class="form-label">Rôle</label>
-                            <select id="role" name="role" class="form-select">
-                                <option value="user" <?php echo (isset($_POST['role']) && $_POST['role'] === 'user') ? 'selected' : ''; ?>>Utilisateur</option>
-                                <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] === 'admin') ? 'selected' : ''; ?>>Administrateur</option>
-                            </select>
-                            <div class="form-text">Choisissez le rôle. Attention : les admins peuvent accéder au panneau.</div>
-                        </div>
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Mot de passe</label>
+                                <input id="password" name="password" class="form-control" type="password" required minlength="6" autocomplete="new-password">
+                                <div class="form-text">Minimum 6 caractères.</div>
+                            </div>
 
-                        <div class="d-flex justify-content-between">
-                            <a href="list_users.php" class="btn btn-outline-secondary">Annuler</a>
-                            <button type="submit" class="btn btn-primary">Créer l'utilisateur</button>
-                        </div>
-                    </form>
+                            <div class="mb-3">
+                                <label for="role" class="form-label">Rôle</label>
+                                <select id="role" name="role" class="form-select" required>
+                                    <option value="user" <?php echo (isset($_POST['role']) && $_POST['role'] === 'user') ? 'selected' : ''; ?>>Utilisateur</option>
+                                    <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] === 'admin') ? 'selected' : ''; ?>>Administrateur</option>
+                                </select>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mt-4">
+                                <a href="list_users.php" class="btn btn-outline-secondary">Annuler</a>
+                                <button type="submit" class="btn btn-primary">Créer l'utilisateur</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-                <div class="card-footer text-muted small">
-                    <span class="me-2"><i class="bi bi-info-circle"></i></span>
-                    Les actions sensibles sont protégées en mode démo.
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h6 class="mb-2">Conseils</h6>
+                        <ul class="mb-0">
+                            <li>Le mot de passe doit contenir au moins 6 caractères.</li>
+                            <li>Les administrateurs ont accès au panneau d'administration.</li>
+                        </ul>
+                        <div class="mt-2 small text-muted">Les actions sensibles sont protégées en mode démo.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-5">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h6 class="mb-2">Aperçu rapide</h6>
+                        <div><strong>Nom :</strong> <span id="previewName" class="text-muted">—</span></div>
+                        <div class="mt-2"><strong>Email :</strong> <span id="previewEmail" class="text-muted">—</span></div>
+                        <div class="mt-3 help-note">Ce panneau n'affiche pas le mot de passe pour des raisons de sécurité.</div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 </main>
 
+<script>
+(function(){
+    'use strict';
+    var form = document.getElementById('addUserForm');
+    if (!form) return;
+
+    form.addEventListener('submit', function(event) {
+        // simple HTML5 check
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+            alert('Veuillez corriger les erreurs du formulaire.');
+        }
+    }, false);
+
+    // live preview
+    var nameEl = document.getElementById('name');
+    var emailEl = document.getElementById('email');
+    var pName = document.getElementById('previewName');
+    var pEmail = document.getElementById('previewEmail');
+
+    function updatePreview() {
+        pName.textContent = nameEl && nameEl.value ? nameEl.value : '—';
+        pEmail.textContent = emailEl && emailEl.value ? emailEl.value : '—';
+    }
+
+    if (nameEl) nameEl.addEventListener('input', updatePreview);
+    if (emailEl) emailEl.addEventListener('input', updatePreview);
+    updatePreview();
+})();
+</script>
+
 <?php include 'includes/footer.php'; ?>
+</html>

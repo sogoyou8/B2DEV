@@ -1,5 +1,25 @@
+<?php
 ?>
     </div>
+
+    <style>
+    .footer{
+        padding: 6px 12px;        /* réduit l'espace vertical */
+        font-size: 0.88rem;       /* texte légèrement plus petit */
+        line-height: 1.1;
+        background: #222;         /* conserve l'apparence sombre existante si besoin */
+        color: #fff;
+        text-align: center;
+        box-shadow: none;
+        border-top: 0;
+    }
+    .footer p {
+        margin: 0;                /* supprimer margins par défaut */
+        padding: 0;
+    }
+    body { margin-bottom: 0; }
+    </style>
+
     <footer class="footer">
         <p>&copy; <?php echo date("Y"); ?> E-commerce Dynamique. Tous droits réservés.</p>
     </footer>

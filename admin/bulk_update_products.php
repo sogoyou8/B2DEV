@@ -17,6 +17,16 @@ $validationErrors = $_SESSION['errors'] ?? [];
 // clear old errors/old after loading so they don't persist forever
 unset($_SESSION['errors'], $_SESSION['old']);
 
+// Ensure $old is an array and normalize selected list to an array of ints
+if (!is_array($old)) {
+    $old = [];
+}
+$old_selected = [];
+if (!empty($old['selected']) && is_array($old['selected'])) {
+    // sanitize values to integers to avoid unexpected types
+    $old_selected = array_map('intval', array_values($old['selected']));
+}
+
 // ============================
 // Pagination / filtres (GET)
 // ============================
@@ -46,7 +56,8 @@ if (!empty($whereClauses)) {
 // compter total
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM items $whereSql");
 $countStmt->execute($whereParams);
-$totalItems = intval($countStmt->fetchColumn());
+$totalItems = $countStmt->fetchColumn();
+$totalItems = $totalItems !== false ? intval($totalItems) : 0;
 $totalPages = max(1, (int)ceil($totalItems / $per_page));
 $offset = ($page - 1) * $per_page;
 
@@ -69,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         $selected = $_POST['selected'] ?? [];
-        if (empty($selected)) {
+        if (empty($selected) || !is_array($selected)) {
             $_SESSION['error'] = "Aucun produit sélectionné pour suppression.";
             header("Location: bulk_update_products.php");
             exit;
@@ -78,8 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             $failed_files = [];
-            foreach ($selected as $id) {
-                $id = intval($id);
+            foreach ($selected as $id_raw) {
+                $id = intval($id_raw);
+                if ($id <= 0) continue;
                 // Supprimer images associées (chemins possibles)
                 $stmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ?");
                 $stmt->execute([$id]);
@@ -92,7 +104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ];
                     foreach ($paths as $p) {
                         if (file_exists($p)) {
-                            @unlink($p) || $failed_files[] = $p;
+                            try {
+                                @unlink($p);
+                            } catch (Exception $e) {
+                                $failed_files[] = $p;
+                            }
                         }
                     }
                 }
@@ -136,11 +152,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         $selected = $_POST['selected'] ?? [];
-        if (empty($selected)) {
+        if (empty($selected) || !is_array($selected)) {
             // return error and preserve posted values
             $_SESSION['errors'] = ["Aucun produit sélectionné."];
             $_SESSION['old'] = [
-                'selected' => $selected,
+                'selected' => $_POST['selected'] ?? [],
                 'set_price' => $_POST['set_price'] ?? '',
                 'set_price_percent' => $_POST['set_price_percent'] ?? '',
                 'set_stock' => $_POST['set_stock'] ?? '',
@@ -195,12 +211,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['errors'] = $errors;
             $_SESSION['old'] = [
                 'selected' => $selected,
-                'set_price' => $_POST['set_price'] ?? '',
-                'set_price_percent' => $_POST['set_price_percent'] ?? '',
-                'set_stock' => $_POST['set_stock'] ?? '',
-                'set_stock_delta' => $_POST['set_stock_delta'] ?? '',
-                'set_category' => $_POST['set_category'] ?? '',
-                'set_threshold' => $_POST['set_threshold'] ?? ''
+                'set_price' => $set_price,
+                'set_price_percent' => $set_price_percent,
+                'set_stock' => $set_stock,
+                'set_stock_delta' => $set_stock_delta,
+                'set_category' => $set_category,
+                'set_threshold' => $set_threshold
             ];
             header("Location: bulk_update_products.php");
             exit;
@@ -208,6 +224,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Normaliser liste d'IDs
         $ids = array_map('intval', array_values($selected));
+        // remove invalid ids
+        $ids = array_filter($ids, function($v){ return $v > 0; });
+        if (empty($ids)) {
+            $_SESSION['error'] = "Liste d'IDs invalide.";
+            header("Location: bulk_update_products.php");
+            exit;
+        }
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
         // Construire UPDATE set-based si possible (optimisé)
@@ -252,15 +275,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $appliedCount = 0;
 
             if (!empty($setParts)) {
-                // Exécuter un UPDATE unique pour tous les IDs sélectionnés
                 $sql = "UPDATE items SET " . implode(', ', $setParts) . " WHERE id IN ($placeholders)";
                 $stmt = $pdo->prepare($sql);
-                $execParams = array_merge($values, $ids);
-                $stmt->execute($execParams);
+                $execVals = array_merge($values, $ids);
+                $stmt->execute($execVals);
+                // Note: using PDOStatement::rowCount() is correct, but some linters flag ambiguous usage.
                 $appliedCount = $stmt->rowCount();
+            } else {
+                // nothing to update
+                $appliedCount = 0;
             }
 
-            // if no setParts (nothing to update), appliedCount stays 0
+            // If price changed by percentage, we may want to normalize to 2 decimals (already done in SQL with ROUND)
+            // For stock changes, triggers/notifications handled elsewhere.
+
             $pdo->commit();
 
             // Message de succès + notification pour traçabilité
@@ -311,41 +339,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             while (($row = fgetcsv($handle)) !== false) {
-                $data = [];
+                // Map columns to expected
+                $mappedRow = [];
                 foreach ($expected as $col) {
-                    $data[$col] = isset($mapped[$col]) ? $row[$mapped[$col]] : null;
+                    if (isset($mapped[$col]) && isset($row[$mapped[$col]])) {
+                        $mappedRow[$col] = $row[$mapped[$col]];
+                    } else {
+                        $mappedRow[$col] = null;
+                    }
                 }
-                $id = intval($data['id']);
-                if (!$id) {
-                    $csvErrors[] = "Ligne ignorée (ID invalide ou manquant).";
+                $id = intval($mappedRow['id'] ?? 0);
+                if ($id <= 0) {
+                    $csvErrors[] = "Ignorée ligne : ID manquant ou invalide.";
                     continue;
                 }
                 $sets = [];
                 $vals = [];
-                if ($data['price'] !== null && $data['price'] !== '') {
-                    if (!is_numeric($data['price'])) {
+                if ($mappedRow['price'] !== null && $mappedRow['price'] !== '') {
+                    if (!is_numeric($mappedRow['price'])) {
                         $csvErrors[] = "ID $id : prix invalide.";
                     } else {
                         $sets[] = "price = ?";
-                        $vals[] = round(floatval($data['price']), 2);
+                        $vals[] = round(floatval($mappedRow['price']), 2);
                     }
                 }
-                if ($data['stock'] !== null && $data['stock'] !== '') {
-                    if (!is_numeric($data['stock']) || intval($data['stock']) != $data['stock']) {
+                if ($mappedRow['stock'] !== null && $mappedRow['stock'] !== '') {
+                    if (!is_numeric($mappedRow['stock']) || intval($mappedRow['stock']) != $mappedRow['stock']) {
                         $csvErrors[] = "ID $id : stock invalide.";
                     } else {
                         $sets[] = "stock = ?";
-                        $vals[] = intval($data['stock']);
+                        $vals[] = intval($mappedRow['stock']);
                     }
                 }
-                if ($data['category'] !== null && $data['category'] !== '') {
+                if ($mappedRow['category'] !== null && $mappedRow['category'] !== '') {
                     $sets[] = "category = ?";
-                    $vals[] = $data['category'];
+                    $vals[] = $mappedRow['category'];
                 }
                 if (!empty($sets)) {
                     $vals[] = $id;
-                    $pdo->prepare("UPDATE items SET " . implode(', ', $sets) . " WHERE id = ?")->execute($vals);
-                    $updated++;
+                    $stmt = $pdo->prepare("UPDATE items SET " . implode(', ', $sets) . " WHERE id = ?");
+                    $stmt->execute($vals);
+                    $updated += $stmt->rowCount();
                 }
             }
             $pdo->commit();
@@ -362,7 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtN = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, 0)");
                 $stmtN->execute(['admin_action', $msg]);
             } catch (Exception $e) {
-                // ignore
+                // ignore logging failure
             }
 
         } catch (Exception $e) {
@@ -378,517 +412,199 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Bulk Update Produits</title>
+    <meta charset="utf-8">
+    <title>Mise à jour en masse - Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
     <style>
-        .thumb { max-width:60px; max-height:60px; object-fit:cover; }
-        .small-input { max-width:140px; display:inline-block; }
-        .help-box { background:#f8f9fa; border:1px solid #e9ecef; padding:12px; border-radius:6px; }
-        .field-help { font-size:0.9rem; color:#6c757d; display:block; margin-top:6px; }
-        .preview-list { max-height: 300px; overflow:auto; }
-        .pagination { margin-top:12px; }
+        :root{
+            --card-radius:12px;
+            --muted:#6c757d;
+            --bg-gradient-1:#f8fbff;
+            --bg-gradient-2:#eef7ff;
+            --accent:#0d6efd;
+            --accent-2:#6610f2;
+        }
+        body.admin-page {
+            background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
+        }
+        .panel-card {
+            border-radius: var(--card-radius);
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
+            box-shadow: 0 12px 36px rgba(3,37,76,0.06);
+            padding: 1.25rem;
+        }
+        .page-title h2 {
+            margin:0;
+            font-weight:700;
+            color:var(--accent-2);
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .help-note { color:var(--muted); font-size:.95rem; }
+        .btn-round { border-radius:8px; }
+        .thumb { width:56px; height:56px; object-fit:cover; border-radius:8px; box-shadow:0 8px 20px rgba(3,37,76,0.04); }
+        .table thead th {
+            background: linear-gradient(180deg,#fbfdff,#f2f7ff);
+            border-bottom:1px solid rgba(3,37,76,0.06);
+            font-weight:600;
+        }
+        .small-input { max-width:160px; }
+        .form-inline-gap { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+        .validation-errors { margin-bottom:.5rem; }
     </style>
 </head>
-<body>
+<body class="admin-page">
 <main class="container py-4">
-    <section class="bg-light p-4 rounded shadow-sm">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h4 mb-0">Mise à jour en masse des produits</h2>
+    <section class="panel-card mb-4">
+        <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
-                <a href="list_products.php" class="btn btn-outline-secondary">Retour à la liste</a>
+                <div class="page-title">
+                    <h2 class="h4 mb-0">Mise à jour en masse des produits</h2>
+                    <div class="small text-muted">Appliquez des changements (prix, stock, catégorie, seuil) à plusieurs produits.</div>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="list_products.php" class="btn btn-outline-secondary btn-sm btn-round">Retour à la liste</a>
             </div>
         </div>
 
         <?php if (!empty($validationErrors)): ?>
-            <div class="alert alert-danger">
+            <div class="alert alert-danger validation-errors">
                 <ul class="mb-0">
-                    <?php foreach ($validationErrors as $err): ?>
-                        <li><?php echo htmlspecialchars($err); ?></li>
+                    <?php foreach ($validationErrors as $ve): ?>
+                        <li><?php echo htmlspecialchars($ve); ?></li>
                     <?php endforeach; ?>
                 </ul>
             </div>
         <?php endif; ?>
 
-        <?php if (isset($_SESSION['error'])): ?>
-            <div class="alert alert-danger"><?php echo $_SESSION['error']; unset($_SESSION['error']); ?></div>
+        <?php if (!empty($_SESSION['error'])): ?>
+            <div class="alert alert-danger text-center shadow-sm mb-3"><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></div>
         <?php endif; ?>
-        <?php if (isset($_SESSION['success'])): ?>
-            <div class="alert alert-success"><?php echo $_SESSION['success']; unset($_SESSION['success']); ?></div>
+        <?php if (!empty($_SESSION['success'])): ?>
+            <div class="alert alert-success text-center shadow-sm mb-3"><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></div>
         <?php endif; ?>
 
-        <form method="get" class="row g-2 mb-3">
-            <div class="col-auto">
-                <input type="text" name="q" class="form-control" placeholder="Recherche nom..." value="<?php echo htmlspecialchars($q); ?>">
-            </div>
-            <div class="col-auto">
-                <input type="text" name="category" class="form-control" placeholder="Catégorie..." value="<?php echo htmlspecialchars($categoryFilter); ?>">
-            </div>
-            <div class="col-auto">
-                <select name="per_page" class="form-select">
-                    <?php foreach ([10,25,50,100] as $pp): ?>
-                        <option value="<?php echo $pp; ?>" <?php echo ($per_page == $pp) ? 'selected' : ''; ?>><?php echo $pp; ?> / page</option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-auto">
-                <button class="btn btn-outline-primary">Filtrer</button>
-            </div>
-            <div class="col-auto ms-auto">
-                <!-- Bouton "Comment ça marche ?" similaire à la page de prédiction IA -->
-                <a href="how_it_works.php?page=bulk_update_products" class="btn btn-outline-info">
-                    <i class="bi bi-info-circle me-1"></i>Comment ça marche ?
-                </a>
-            </div>
+        <form method="get" class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+            <input type="text" name="q" class="form-control form-control-sm" placeholder="Recherche nom..." value="<?php echo htmlspecialchars($q); ?>" style="min-width:220px;">
+            <input type="text" name="category" class="form-control form-control-sm" placeholder="Catégorie..." value="<?php echo htmlspecialchars($categoryFilter); ?>" style="min-width:160px;">
+            <select name="per_page" class="form-select form-select-sm small-input">
+                <?php foreach ([10,25,50,100] as $pp): ?>
+                    <option value="<?php echo $pp; ?>" <?php echo ($per_page == $pp) ? 'selected' : ''; ?>><?php echo $pp; ?>/page</option>
+                <?php endforeach; ?>
+            </select>
+            <button class="btn btn-sm btn-outline-primary">Filtrer</button>
+            <div class="ms-auto text-muted small">Utilisez les filtres pour cibler les produits avant application.</div>
         </form>
 
-        <!-- Petit rappel en place (facultatif) — l'explication complète est accessible via le bouton ci-dessus -->
-        <div class="help-box mb-3">
-            <strong>Explications rapides</strong>
-            <ul class="mb-0 mt-2">
-                <li>Utilisez les filtres pour cibler les produits avant d'appliquer des modifications.</li>
-                <li>Le bouton <em>Appliquer aux sélectionnés</em> ouvre un aperçu avant validation.</li>
-                <li>Vous pouvez importer un CSV (colonnes : id,price,stock,category).</li>
-                <li>Pour la documentation complète et les bonnes pratiques, cliquez sur "Comment ça marche ?".</li>
-            </ul>
-        </div>
+        <div class="mb-3">
+            <form method="post" id="bulkForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <div class="alert alert-light">
+                        <strong>Explications rapides</strong>
+                        <ul class="mb-0">
+                            <li>Utilisez les filtres pour cibler les produits avant d'appliquer des modifications.</li>
+                            <li>Le bouton Appliquer aux sélectionnés ouvre une confirmation avant validation.</li>
+                            <li>Vous pouvez importer un CSV (colonnes : id,price,stock,category).</li>
+                        </ul>
+                    </div>
+                </div>
 
-        <form method="post" id="bulkForm">
-            <input type="hidden" name="apply_bulk_confirm" id="apply_bulk_confirm" value="0">
-            <div class="row g-2 align-items-center mb-3">
-                <div class="col-auto">
-                    <label class="form-label">Prix (absolu)</label>
-                    <input type="number" step="0.01" name="set_price" id="set_price" class="form-control small-input" placeholder="19.99" value="<?php echo isset($old['set_price']) ? htmlspecialchars($old['set_price']) : ''; ?>">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label">Prix (% relatif)</label>
-                    <input type="number" step="0.1" name="set_price_percent" id="set_price_percent" class="form-control small-input" placeholder="10 ou -5" value="<?php echo isset($old['set_price_percent']) ? htmlspecialchars($old['set_price_percent']) : ''; ?>">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label">Stock (absolu)</label>
-                    <input type="number" name="set_stock" id="set_stock" class="form-control small-input" placeholder="10" value="<?php echo isset($old['set_stock']) ? htmlspecialchars($old['set_stock']) : ''; ?>">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label">Stock (delta)</label>
-                    <input type="number" name="set_stock_delta" id="set_stock_delta" class="form-control small-input" placeholder="2 ou -1" value="<?php echo isset($old['set_stock_delta']) ? htmlspecialchars($old['set_stock_delta']) : ''; ?>">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label">Catégorie</label>
-                    <input type="text" name="set_category" id="set_category" class="form-control small-input" placeholder="chaussure" value="<?php echo isset($old['set_category']) ? htmlspecialchars($old['set_category']) : ''; ?>">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label">Seuil alerte</label>
-                    <input type="number" name="set_threshold" id="set_threshold" class="form-control small-input" placeholder="5" value="<?php echo isset($old['set_threshold']) ? htmlspecialchars($old['set_threshold']) : ''; ?>">
-                </div>
-            </div>
+                <div class="row g-2 align-items-center">
+                    <div class="col-auto small">Prix (absolu)</div>
+                    <div class="col-auto"><input type="text" name="set_price" class="form-control form-control-sm" placeholder="Prix (absolu)" value="<?php echo htmlspecialchars($old['set_price'] ?? ''); ?>"></div>
 
-            <div class="table-responsive">
-                <table class="table table-sm table-hover">
-                    <thead>
-                        <tr>
-                            <th><input type="checkbox" id="checkAll"></th>
-                            <th>ID</th>
-                            <th>Image</th>
-                            <th>Nom</th>
-                            <th>Prix</th>
-                            <th>Stock</th>
-                            <th>Catégorie</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php
-                        $oldSelected = is_array($old['selected'] ?? null) ? array_map('intval', $old['selected']) : [];
-                        foreach ($products as $p): ?>
-                            <tr data-id="<?php echo (int)$p['id']; ?>" data-price="<?php echo htmlspecialchars($p['price']); ?>" data-stock="<?php echo (int)$p['stock']; ?>">
-                                <td><input type="checkbox" name="selected[]" value="<?php echo $p['id']; ?>" class="row-check" <?php echo in_array((int)$p['id'], $oldSelected) ? 'checked' : ''; ?>></td>
-                                <td><?php echo $p['id']; ?></td>
-                                <td>
-                                    <?php
-                                    $img = null;
-                                    $stmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1");
-                                    $stmt->execute([$p['id']]);
-                                    $img = $stmt->fetchColumn();
-                                    if ($img && file_exists(__DIR__ . "/../assets/images/" . $img)): ?>
-                                        <img src="../assets/images/<?php echo htmlspecialchars($img); ?>" class="thumb" alt="">
-                                    <?php elseif ($p['image'] && file_exists(__DIR__ . "/../assets/images/" . $p['image'])): ?>
-                                        <img src="../assets/images/<?php echo htmlspecialchars($p['image']); ?>" class="thumb" alt="">
-                                    <?php else: ?>
-                                        <span class="text-muted">-</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?php echo htmlspecialchars($p['name']); ?></td>
-                                <td><?php echo number_format($p['price'], 2); ?> €</td>
-                                <td><?php echo intval($p['stock']); ?></td>
-                                <td><?php echo htmlspecialchars($p['category']); ?></td>
+                    <div class="col-auto small">Prix (% relatif)</div>
+                    <div class="col-auto"><input type="text" name="set_price_percent" class="form-control form-control-sm" placeholder="Ex: 10 ou -5" value="<?php echo htmlspecialchars($old['set_price_percent'] ?? ''); ?>"></div>
+
+                    <div class="col-auto small">Stock (absolu)</div>
+                    <div class="col-auto"><input type="number" name="set_stock" class="form-control form-control-sm" placeholder="Stock (absolu)" value="<?php echo htmlspecialchars($old['set_stock'] ?? ''); ?>"></div>
+
+                    <div class="col-auto small">Stock (delta)</div>
+                    <div class="col-auto"><input type="number" name="set_stock_delta" class="form-control form-control-sm" placeholder="Stock (delta)" value="<?php echo htmlspecialchars($old['set_stock_delta'] ?? ''); ?>"></div>
+
+                    <div class="col-auto small">Catégorie</div>
+                    <div class="col-auto"><input type="text" name="set_category" class="form-control form-control-sm" placeholder="Catégorie" value="<?php echo htmlspecialchars($old['set_category'] ?? ''); ?>"></div>
+
+                    <div class="col-auto small">Seuil alerte</div>
+                    <div class="col-auto"><input type="number" name="set_threshold" class="form-control form-control-sm" placeholder="Seuil alerte" value="<?php echo htmlspecialchars($old['set_threshold'] ?? ''); ?>"></div>
+
+                    <div class="col-auto ms-auto">
+                        <button type="submit" name="apply_bulk" class="btn btn-primary btn-sm">Appliquer aux sélectionnés</button>
+                    </div>
+                </div>
+
+                <div class="mt-3 table-responsive rounded shadow-sm">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:40px;"><input type="checkbox" id="checkAll"></th>
+                                <th style="width:80px;">ID</th>
+                                <th>Image</th>
+                                <th>Nom</th>
+                                <th class="text-end">Prix</th>
+                                <th>Stock</th>
+                                <th>Catégorie</th>
                             </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($products)): ?>
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-muted">Aucun produit trouvé.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($products as $p): ?>
+                                    <?php
+                                        $pid = (int)$p['id'];
+                                        $imgStmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1");
+                                        $imgStmt->execute([$pid]);
+                                        $image = $imgStmt->fetch(PDO::FETCH_ASSOC);
+                                        $imgFile = __DIR__ . "/../assets/images/" . ($image['image'] ?? '');
+                                        $imgSrc = (!empty($image['image']) && file_exists($imgFile)) ? ('../assets/images/' . $image['image']) : '../assets/images/default.png';
+                                    ?>
+                                    <tr>
+                                        <td><input type="checkbox" name="selected[]" value="<?php echo $pid; ?>" <?php echo in_array($pid, $old_selected) ? 'checked' : ''; ?>></td>
+                                        <td class="fw-bold text-secondary"><?php echo $pid; ?></td>
+                                        <td><img src="<?php echo htmlspecialchars($imgSrc); ?>" class="thumb" alt=""></td>
+                                        <td><?php echo htmlspecialchars($p['name']); ?></td>
+                                        <td class="text-end"><?php echo number_format((float)$p['price'], 2); ?> €</td>
+                                        <td><?php echo (int)$p['stock']; ?></td>
+                                        <td><?php echo htmlspecialchars($p['category'] ?? ''); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
 
-            <div class="mt-2">
-                <button type="submit" name="apply_bulk" id="applyBtn" class="btn btn-success">Appliquer aux sélectionnés</button>
-                <button type="submit" name="delete_selected" class="btn btn-danger ms-2" id="deleteBtn" onclick="return confirm('Confirmer suppression des produits sélectionnés ?')">Supprimer sélection</button>
-            </div>
-        </form>
-
-        <!-- Pagination -->
-        <nav aria-label="Pagination" class="pagination">
-            <ul class="pagination">
-                <?php
-                $baseUrlParams = $_GET;
-                for ($p = 1; $p <= $totalPages; $p++):
-                    $baseUrlParams['page'] = $p;
-                    $link = $_SERVER['PHP_SELF'] . '?' . http_build_query($baseUrlParams);
-                ?>
-                    <li class="page-item <?php echo $p == $page ? 'active' : ''; ?>"><a class="page-link" href="<?php echo $link; ?>"><?php echo $p; ?></a></li>
-                <?php endfor; ?>
-            </ul>
-        </nav>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div class="small text-muted">Sélectionnez des produits puis cliquez sur "Appliquer aux sélectionnés".</div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" name="delete_selected" class="btn btn-danger btn-sm" onclick="return confirm('Confirmer la suppression des produits sélectionnés ? Cette action est irréversible.')">Supprimer la sélection</button>
+                    </div>
+                </div>
+            </form>
+        </div>
 
         <hr>
 
-        <h5>Importer CSV (colonnes : id,price,stock,category)</h5>
-        <form method="post" enctype="multipart/form-data" class="mt-2">
-            <div class="mb-2">
-                <input type="file" name="csv_file" accept=".csv" required>
-            </div>
-            <div>
-                <button type="submit" name="import_csv" class="btn btn-primary">Importer CSV</button>
-            </div>
-        </form>
+        <div>
+            <form method="post" enctype="multipart/form-data" class="d-flex gap-2 align-items-center">
+                <label class="mb-0">Fichier CSV: <input type="file" name="csv_file" accept=".csv" required></label>
+                <button type="submit" name="import_csv" class="btn btn-sm btn-outline-primary">Importer CSV</button>
+                <div class="ms-auto small text-muted">Format attendu : id,price,stock,category</div>
+            </form>
+        </div>
     </section>
 </main>
 
-<!-- Preview Modal -->
-<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-eye"></i> Aperçu des modifications</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-      </div>
-      <div class="modal-body">
-        <p id="previewSummary" class="mb-2"></p>
-        <div class="preview-list">
-            <table class="table table-sm">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Nom</th>
-                        <th>Ancien prix</th>
-                        <th>Nouveau prix</th>
-                        <th>Ancien stock</th>
-                        <th>Nouveau stock</th>
-                    </tr>
-                </thead>
-                <tbody id="previewRows"></tbody>
-            </table>
-        </div>
-        <div class="mt-2 text-muted small">Vérifiez l'aperçu avant de confirmer. Les champs vides ne seront pas modifiés.</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" id="confirmApply" class="btn btn-success">Confirmer et appliquer</button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
-(function(){
-    // helper to load scripts dynamically (returns Promise)
-    function loadScript(url) {
-        return new Promise(function(resolve, reject){
-            var s = document.createElement('script');
-            s.src = url;
-            s.async = true;
-            s.onload = function(){ resolve(); };
-            s.onerror = function(){ reject(new Error('Failed to load ' + url)); };
-            document.head.appendChild(s);
-        });
-    }
-
-    // Ensure bootstrap bundle is available before using bootstrap.Tooltip / Modal
-    function ensureBootstrap() {
-        if (typeof window.bootstrap !== 'undefined') {
-            return Promise.resolve();
-        }
-        // try to load Bootstrap 5 bundle from CDN
-        return loadScript('https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js').catch(function(err){
-            console.warn('Impossible de charger bootstrap bundle depuis CDN.', err);
-            return Promise.resolve(); // continue, code will handle absence
-        });
-    }
-
-    // Initialize page behavior
-    function initBulkPage() {
-        var form = document.getElementById('bulkForm');
-        var inputsToWatch = ['set_price','set_price_percent','set_stock','set_stock_delta'];
-        var confirmedApply = false; // flag to bypass modal on confirmed submit
-
-        // track which submit button was clicked (for browsers that don't support event.submitter)
-        var lastSubmitButton = null;
-        document.addEventListener('click', function(e){
-            var b = e.target;
-            if (!b) return;
-            if (b.closest && b.closest('form#bulkForm') && b.tagName === 'BUTTON') {
-                lastSubmitButton = b;
-            }
-        });
-
-        function clearAlert() {
-            var existing = document.getElementById('bulkFormAlert');
-            if (existing) existing.remove();
-        }
-
-        function showAlert(messages) {
-            clearAlert();
-            var alert = document.createElement('div');
-            alert.id = 'bulkFormAlert';
-            alert.className = 'alert alert-warning';
-            alert.innerHTML = messages.map(function(m){ return '<div>'+m+'</div>'; }).join('');
-            // insert alert directly above the form
-            form.parentNode.insertBefore(alert, form);
-            // scroll to alert for visibility
-            window.scrollTo({ top: alert.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
-        }
-
-        // Initialize Bootstrap tooltips if available
-        if (typeof window.bootstrap !== 'undefined') {
-            try {
-                var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                tooltipTriggerList.forEach(function (el) {
-                    new bootstrap.Tooltip(el);
-                });
-            } catch (e) {
-                console.warn('Tooltips init failed', e);
-            }
-        } else {
-            // If bootstrap not available, we'll ignore tooltips (no-op)
-            console.warn('Bootstrap not present, skipping tooltip init');
-        }
-
-        // checkAll handler
-        var checkAllEl = document.getElementById('checkAll');
-        if (checkAllEl) {
-            checkAllEl.addEventListener('change', function(e){
-                document.querySelectorAll('.row-check').forEach(function(cb){ cb.checked = e.target.checked; });
-            });
-        }
-
-        // Remove alert when user edits relevant fields
-        inputsToWatch.forEach(function(id){
-            var el = document.getElementById(id);
-            if (el) el.addEventListener('input', function(){ clearAlert(); });
-        });
-
-        // Build preview rows given selected checkboxes
-        function buildPreview() {
-            var selectedRows = Array.from(document.querySelectorAll('input.row-check:checked')).map(function(cb){
-                var tr = cb.closest('tr');
-                return tr;
-            });
-
-            if (selectedRows.length === 0) {
-                return { count: 0, rows: [] };
-            }
-
-            var setPrice = (document.getElementById('set_price') || {value:''}).value.trim();
-            var setPricePct = (document.getElementById('set_price_percent') || {value:''}).value.trim();
-            var setStock = (document.getElementById('set_stock') || {value:''}).value.trim();
-            var setStockDelta = (document.getElementById('set_stock_delta') || {value:''}).value.trim();
-
-            var rows = selectedRows.map(function(tr){
-                var id = tr.getAttribute('data-id');
-                var name = tr.querySelector('td:nth-child(4)') ? tr.querySelector('td:nth-child(4)').innerText.trim() : '';
-                var oldPrice = parseFloat(tr.getAttribute('data-price')) || 0;
-                var oldStock = parseInt(tr.getAttribute('data-stock')) || 0;
-                var newPrice = oldPrice;
-                var newStock = oldStock;
-
-                if (setPrice !== '') {
-                    newPrice = parseFloat(setPrice) || newPrice;
-                } else if (setPricePct !== '') {
-                    var pct = parseFloat(setPricePct) || 0;
-                    newPrice = +(oldPrice * (1 + (pct/100))).toFixed(2);
-                }
-
-                if (setStock !== '') {
-                    newStock = Math.max(0, parseInt(setStock) || newStock);
-                } else if (setStockDelta !== '') {
-                    var delta = parseInt(setStockDelta) || 0;
-                    newStock = Math.max(0, oldStock + delta);
-                }
-
-                return {
-                    id: id,
-                    name: name,
-                    oldPrice: oldPrice,
-                    newPrice: newPrice,
-                    oldStock: oldStock,
-                    newStock: newStock
-                };
-            });
-
-            return { count: selectedRows.length, rows: rows };
-        }
-
-        // when submit, validate and show modal preview
-        if (form) {
-            form.addEventListener('submit', function(e){
-                // If user already confirmed in modal, allow submission
-                if (confirmedApply) return true;
-
-                // determine which button triggered the submit
-                var submitter = (typeof e.submitter !== 'undefined' && e.submitter) ? e.submiter : lastSubmitButton;
-                var submitName = submitter && submitter.name ? submitter.name : null;
-
-                // Only intercept the "apply_bulk" action to show preview.
-                if (submitName !== 'apply_bulk') {
-                    // allow default submit (delete / import etc.)
-                    return true;
-                }
-
-                var setPrice = (document.getElementById('set_price') || {value:''}).value.trim();
-                var setPricePct = (document.getElementById('set_price_percent') || {value:''}).value.trim();
-                var setStock = (document.getElementById('set_stock') || {value:''}).value.trim();
-                var setStockDelta = (document.getElementById('set_stock_delta') || {value:''}).value.trim();
-
-                var errors = [];
-
-                if (setPrice !== '' && setPricePct !== '') {
-                    errors.push("Vous avez renseigné à la fois 'Prix (absolu)' et 'Prix (% relatif)'. Choisissez une seule méthode.");
-                }
-
-                if (setStock !== '' && setStockDelta !== '') {
-                    errors.push("Vous avez renseigné à la fois 'Stock (absolu)' et 'Stock (delta)'. Choisissez une seule méthode.");
-                }
-
-                if (errors.length) {
-                    e.preventDefault();
-                    showAlert(errors);
-                    return false;
-                }
-
-                // ensure at least one product selected
-                var selected = document.querySelectorAll('input.row-check:checked');
-                if (selected.length === 0) {
-                    e.preventDefault();
-                    showAlert(["Aucun produit sélectionné. Cochez au moins un produit pour appliquer les modifications."]);
-                    return false;
-                }
-
-                // Build preview and show modal
-                e.preventDefault();
-                clearAlert();
-                var preview = buildPreview();
-                var previewRowsEl = document.getElementById('previewRows');
-                var previewSummary = document.getElementById('previewSummary');
-                previewRowsEl.innerHTML = '';
-                previewSummary.innerText = preview.count + " produit(s) sélectionné(s) — aperçu des changements :";
-
-                preview.rows.forEach(function(r){
-                    var tr = document.createElement('tr');
-                    tr.innerHTML = '<td>' + r.id + '</td>' +
-                                   '<td>' + escapeHtml(r.name) + '</td>' +
-                                   '<td>' + formatPrice(r.oldPrice) + '</td>' +
-                                   '<td>' + formatPrice(r.newPrice) + '</td>' +
-                                   '<td>' + r.oldStock + '</td>' +
-                                   '<td>' + r.newStock + '</td>';
-                    previewRowsEl.appendChild(tr);
-                });
-
-                // If bootstrap modal is available, use it; otherwise fallback to confirm()
-                if (typeof window.bootstrap !== 'undefined' && typeof bootstrap.Modal === 'function') {
-                    var previewModalEl = document.getElementById('previewModal');
-
-                    // Allow closing via ESC/croix/backdrop and keep modal interactive
-                    var previewModal = new bootstrap.Modal(previewModalEl, { keyboard: true, backdrop: true });
-
-                    // Ensure any previous hidden flag is reset when modal opens
-                    var flagElOnOpen = document.getElementById('apply_bulk_confirm');
-                    if (flagElOnOpen) flagElOnOpen.value = '0';
-
-                    // When modal is hidden (closed by croix/backdrop/esc), reset state
-                    previewModalEl.addEventListener('hidden.bs.modal', function () {
-                        var f = document.getElementById('apply_bulk_confirm');
-                        if (f) f.value = '0';
-                        confirmedApply = false;
-                    }, { once: false });
-
-                    // Make sure dismiss buttons also clear the hidden flag (defensive)
-                    Array.from(previewModalEl.querySelectorAll('[data-bs-dismiss="modal"]')).forEach(function(btn){
-                        btn.addEventListener('click', function(){
-                            var f = document.getElementById('apply_bulk_confirm');
-                            if (f) f.value = '0';
-                        });
-                    });
-
-                    previewModal.show();
-
-                    // Confirm button handler (clean previous handlers by replacing node)
-                    var confirmBtn = document.getElementById('confirmApply');
-                    var newConfirm = confirmBtn.cloneNode(true);
-                    confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
-                    newConfirm.addEventListener('click', function(){
-                        var f = document.getElementById('apply_bulk_confirm');
-                        if (f) f.value = '1';
-                        confirmedApply = true;
-                        previewModal.hide();
-                        // submit the form normally (will reach server-side)
-                        form.submit();
-                    }, { once: true });
-                } else {
-                    // fallback: use window.confirm
-                    var ok = confirm(preview.count + " produits seront modifiés. Confirmer ?");
-                    if (ok) {
-                        var flag = document.getElementById('apply_bulk_confirm');
-                        if (flag) flag.value = '1';
-                        confirmedApply = true;
-                        form.submit();
-                    }
-                }
-
-                return false;
-            });
-        }
-
-        function formatPrice(v) {
-            return (Number(v).toFixed(2)) + ' €';
-        }
-
-        function escapeHtml(text) {
-            if (!text) return '';
-            return text.replace(/[&<>"'`=\/]/g, function (s) {
-              return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[s];
-            });
-        }
-    }
-
-    // On DOM ready, ensure bootstrap then init
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function(){
-            ensureBootstrap().then(initBulkPage);
-        });
-    } else {
-        ensureBootstrap().then(initBulkPage);
-    }
-})();
-</script>
-
-<!-- Optionally load jQuery (if other admin pages require it) - only if absent -->
-<script>
-(function(){
-    if (typeof window.jQuery === 'undefined') {
-        var s = document.createElement('script');
-        s.src = 'https://code.jquery.com/jquery-3.6.0.min.js';
-        s.async = true;
-        document.head.appendChild(s);
-    }
-})();
+document.getElementById('checkAll')?.addEventListener('change', function(e){
+    document.querySelectorAll('input[name="selected[]"]').forEach(cb => cb.checked = e.target.checked);
+});
 </script>
 
 </body>
 </html>
-<?php include_once 'includes/footer.php';?>

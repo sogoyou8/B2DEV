@@ -2,63 +2,456 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
-include 'includes/db.php'; // Assure la connexion PDO pour le rôle admin
-?>
-<!DOCTYPE html>
-<html lang="en">
+
+// Déterminer état de session / rôle admin (valeurs provenant des pages qui incluent ce header)
+$isLoggedIn = !empty($_SESSION['user_id']) || !empty($_SESSION['admin_logged_in']);
+$adminRole = !empty($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'];
+
+// Par défaut, pas de notifications (les pages admin affichent leur propre header si nécessaire)
+$unreadNotifications = 0;
+$recentNotifications = [];
+
+/**
+ * Retourne 'active' si $href est présent dans l'URI courante.
+ */
+function isActive(string $href): string {
+    $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    return (strpos($path, $href) !== false) ? 'active' : '';
+}
+
+/**
+ * assetUrl — génère une URL web correcte vers un fichier dans /assets en tenant compte
+ * du document root et du chemin physique du projet.
+ */
+function assetUrl(string $relativePath): string {
+    // chemin absolu FS vers le dossier assets du projet (basé sur ce fichier)
+    $assetsFsDir = realpath(__DIR__ . '/../assets');
+    if ($assetsFsDir !== false) {
+        // normaliser
+        $assetsFsDir = str_replace('\\', '/', $assetsFsDir);
+
+        // essayer d'obtenir document root réel
+        $docRoot = isset($_SERVER['DOCUMENT_ROOT']) ? realpath($_SERVER['DOCUMENT_ROOT']) : false;
+        if ($docRoot !== false) {
+            $docRoot = str_replace('\\', '/', $docRoot);
+        } else {
+            // fallback to raw DOCUMENT_ROOT if realpath failed
+            $docRoot = str_replace('\\', '/', rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/'));
+        }
+
+        // si assets est sous le docroot, construire l'URL relative au webroot
+        if ($docRoot !== '' && strpos($assetsFsDir, $docRoot) === 0) {
+            $webPath = substr($assetsFsDir, strlen($docRoot));
+            $webPath = '/' . ltrim(str_replace('\\', '/', $webPath), '/');
+            return rtrim($webPath, '/') . '/' . ltrim(str_replace('\\', '/', $relativePath), '/');
+        }
+    }
+
+    // dernier recours : construire depuis la racine de l'URL en conservant une barre initiale
+    return '/' . ltrim('assets/' . ltrim($relativePath, '/'), '/');
+}
+
+?><!doctype html>
+<html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8" />
     <title>E-commerce Dynamique</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/css/style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Performance: preconnect / preload -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet"></noscript>
+
+    <?php $logoPath = htmlspecialchars(assetUrl('images/custom_logo.png')); ?>
+    <link rel="preload" as="image" href="<?php echo $logoPath; ?>">
+
+    <!-- Bootstrap 4.5 (compatibilité frontend existant) -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" crossorigin="anonymous">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+    <!-- Projet - styles globaux -->
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(assetUrl('css/style.css')); ?>">
+
+    <!-- Enhanced navbar critical CSS (aesthetic improvements : glassmorphism, smoother spacing, subtle shadows) -->
+    <style>
+    :root{
+        --nav-h: 72px;
+        --nav-bg: rgba(28,30,31,0.72);
+        --nav-blur: 8px;
+        --accent: #5b8cff;
+        --accent-2: #6b6eff;
+        --muted: rgba(255,255,255,0.78);
+        --glass-border: rgba(255,255,255,0.06);
+        --pill-bg: rgba(255,255,255,0.06);
+        --radius: 14px;
+        --shadow-elevate: 0 8px 24px rgba(2,6,23,0.35);
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+
+    /* Navbar container */
+    .site-navbar {
+        min-height: var(--nav-h);
+        background: linear-gradient(180deg, rgba(20,22,23,0.88), rgba(30,32,33,0.85));
+        backdrop-filter: blur(var(--nav-blur));
+        -webkit-backdrop-filter: blur(var(--nav-blur));
+        border-bottom: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-elevate);
+        padding: .45rem 1rem;
+    }
+
+    /* Brand */
+    .site-brand {
+        display:flex;
+        align-items:center;
+        gap: .7rem;
+        text-decoration:none;
+        color: #fff;
+        font-weight:700;
+        letter-spacing: .2px;
+    }
+    .site-brand img.site-logo {
+        height:38px;
+        width:auto;
+        border-radius:8px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 -2px 6px rgba(255,255,255,0.02);
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+        padding:4px;
+    }
+    .site-brand .site-brand-text {
+        color: var(--muted);
+        font-size:1rem;
+        display:inline-block;
+    }
+
+    /* Center nav links */
+    .navbar-nav.mx-auto {
+        margin-left:auto;
+        margin-right:auto;
+        gap: .15rem;
+    }
+    .nav-link {
+        color: var(--muted) !important;
+        padding: .45rem .8rem;
+        border-radius: 10px;
+        transition: all .18s cubic-bezier(.2,.9,.2,1);
+        font-weight:600;
+        font-size:0.98rem;
+    }
+    .nav-link:hover, .nav-link:focus {
+        color: #fff !important;
+        transform: translateY(-2px);
+        text-decoration:none;
+    }
+    .nav-link.active {
+        background: linear-gradient(90deg, rgba(91,140,255,0.12), rgba(107,110,255,0.08));
+        color: #fff !important;
+        box-shadow: 0 6px 18px rgba(91,140,255,0.06);
+    }
+
+    /* Search pill */
+    .nav-search {
+        display:flex;
+        align-items:center;
+        gap:.5rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+        border-radius: 999px;
+        padding:6px 10px;
+        min-width:220px;
+        max-width:460px;
+        box-shadow: 0 6px 20px rgba(2,6,23,0.25);
+    }
+    .nav-search input[type="search"]{
+        border:0;
+        outline:0;
+        background:transparent;
+        color: #f7f7f7;
+        padding:6px 8px;
+        font-weight:500;
+    }
+    .nav-search .search-btn {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:4px;
+        width:36px; height:36px;
+        border-radius:50%;
+        transition: all .15s;
+    }
+    .nav-search .search-btn:hover { transform: scale(1.04); color: #fff; background: rgba(255,255,255,0.03); }
+
+    /* Icon buttons */
+    .nav-icon-btn {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        color: var(--muted);
+        padding:.4rem .55rem;
+        border-radius:10px;
+        transition: all .12s;
+    }
+    .nav-icon-btn:hover { color:#fff; transform: translateY(-2px); background: rgba(255,255,255,0.03); text-decoration:none; }
+
+    /* Notification / badges */
+    .badge-notif {
+        transform: translateY(-4px);
+        font-size:0.66rem;
+        padding:.18rem .46rem;
+        border-radius:10px;
+        background: linear-gradient(90deg,#ff5f6d,#ffc371);
+        color:#111;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+        position:relative;
+        margin-left:6px;
+    }
+
+    /* Mobile adjustments */
+    @media (max-width: 991.98px) {
+        .navbar-nav.mx-auto { display:flex; gap:.25rem; }
+        .nav-search { display:none; } /* hidden, mobile has separate collapse */
+    }
+
+    /* Mobile compact search */
+    #mobileSearchContainer {
+        display:none;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        top: calc(var(--nav-h) + 8px);
+        width: calc(100% - 40px);
+        max-width:720px;
+        z-index: 1500;
+    }
+    #mobileSearchContainer.show {
+        display:block;
+    }
+    #mobileSearchContainer .mobile-search-box {
+        border-radius:12px;
+        padding:10px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+        box-shadow: 0 12px 30px rgba(2,6,23,0.45);
+        display:flex;
+        gap:.5rem;
+        align-items:center;
+    }
+
+    /* Accessibility helper */
+    .sr-only-focusable:focus { position: static; width:auto; height:auto; overflow:visible; clip:auto; }
+
+    /* subtle caret for dropdown toggles */
+    .dropdown-toggle::after { display:none; }
+
+    </style>
 </head>
+
 <body>
-    <header>
-        <nav>
-            <ul class="nav">
-                <li class="nav-item"><a class="nav-link" href="index.php">Accueil</a></li>
-                <li class="nav-item"><a class="nav-link" href="about.php">Qui sommes-nous ?</a></li>
-                <li class="nav-item"><a class="nav-link" href="products.php">Articles</a></li>
-                <li class="nav-item"><a class="nav-link" href="new_products.php">Nouveautés</a></li>
-                <li class="nav-item"><a class="nav-link" href="cart.php">Panier</a></li>
-                <li class="nav-item"><a class="nav-link" href="favorites.php">Favoris</a></li>
-                <?php if (isset($_SESSION['logged_in']) && $_SESSION['logged_in']): ?>
-                    <li class="nav-item"><a class="nav-link" href="profile.php">Profil</a></li>
-                    <li class="nav-item"><a class="nav-link" href="orders_invoices.php">Mes Commandes et Factures</a></li>
-                    <?php
-                    // Vérification du rôle admin
-                    if (isset($_SESSION['user_id'])) {
-                        $query = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-                        $query->execute([$_SESSION['user_id']]);
-                        $role = $query->fetchColumn();
-                        if ($role === 'admin'): ?>
-                            <li class="nav-item"><a class="nav-link" href="admin/dashboard.php">Admin</a></li>
-                        <?php endif;
-                    }
-                    ?>
-                    <li class="nav-item"><a class="nav-link" href="logout.php">Déconnexion</a></li>
+<header>
+<nav class="navbar navbar-expand-lg site-navbar sticky-top" role="navigation" aria-label="Navigation principale">
+    <div class="container-fluid">
+        <a class="navbar-brand site-brand" href="index.php" title="Accueil — E‑commerce Dynamique">
+            <img src="<?php echo $logoPath; ?>" alt="E‑commerce Dynamique" class="site-logo" />
+            <span class="site-brand-text d-none d-sm-inline">E-commerce Dynamique</span>
+        </a>
+
+        <button class="navbar-toggler text-white border-0 p-2" type="button" data-toggle="collapse" data-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Basculer la navigation">
+            <i class="bi bi-list" aria-hidden="true" style="font-size:1.2rem;"></i>
+        </button>
+
+        <div class="collapse navbar-collapse" id="mainNavbar">
+            <ul class="navbar-nav">
+                <!-- left placeholder for future items -->
+            </ul>
+
+            <ul class="navbar-nav mx-auto">
+                <li class="nav-item <?php echo isActive('/about.php'); ?>">
+                    <a class="nav-link <?php echo isActive('/about.php'); ?>" href="about.php">Qui sommes-nous ?</a>
+                </li>
+                <li class="nav-item <?php echo isActive('/products.php'); ?>">
+                    <a class="nav-link <?php echo isActive('/products.php'); ?>" href="products.php">Articles</a>
+                </li>
+                <li class="nav-item <?php echo isActive('/new_products.php'); ?>">
+                    <a class="nav-link <?php echo isActive('/new_products.php'); ?>" href="new_products.php">Nouveautés</a>
+                </li>
+            </ul>
+
+            <ul class="navbar-nav align-items-center">
+                <!-- Desktop search -->
+                <li class="nav-item d-none d-lg-flex align-items-center me-2">
+                    <form action="search.php" method="get" class="d-flex align-items-center" role="search" aria-label="Recherche produits">
+                        <div class="nav-search" role="search" aria-hidden="false">
+                            <label for="navSearch" class="sr-only">Rechercher des produits</label>
+                            <input id="navSearch" name="query" type="search" placeholder="Rechercher des produits, ex: chaussures, poster..." aria-label="Rechercher des produits" autocomplete="off" value="<?php echo htmlspecialchars($_GET['query'] ?? '', ENT_QUOTES); ?>">
+                            <button type="submit" class="search-btn" aria-label="Lancer la recherche"><i class="bi bi-search"></i></button>
+                        </div>
+                    </form>
+                </li>
+
+                <!-- Mobile search toggle -->
+                <li class="nav-item d-lg-none">
+                    <a class="nav-link nav-icon-btn" href="#" id="mobileSearchToggle" aria-controls="mobileSearchContainer" aria-expanded="false" aria-label="Ouvrir la recherche mobile">
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                    </a>
+                </li>
+
+                <!-- Cart -->
+                <li class="nav-item">
+                    <a class="nav-link nav-icon-btn <?php echo isActive('/cart.php'); ?>" href="cart.php" aria-label="Panier">
+                        <i class="bi bi-cart2" aria-hidden="true"></i>
+                        <?php if (!empty($_SESSION['cart_count'])): ?>
+                            <span class="badge badge-notif" aria-live="polite" data-badge="cart"><?php echo ((int)$_SESSION['cart_count'] > 99) ? '99+' : (int)$_SESSION['cart_count']; ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
+
+                <!-- Favorites -->
+                <li class="nav-item">
+                    <a class="nav-link nav-icon-btn <?php echo isActive('/favorites.php'); ?>" href="favorites.php" aria-label="Favoris">
+                        <i class="bi bi-heart" aria-hidden="true"></i>
+                        <?php if (!empty($_SESSION['favorites_count'])): ?>
+                            <span class="badge badge-notif" aria-live="polite" data-badge="favorites"><?php echo ((int)$_SESSION['favorites_count'] > 99) ? '99+' : (int)$_SESSION['favorites_count']; ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
+
+                <?php if ($isLoggedIn): ?>
+                    <?php if ($adminRole): ?>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link nav-icon-btn" href="admin/notifications.php" id="notifMenu" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Centre de notifications" aria-controls="notifDropdown">
+                                <i class="bi bi-bell" aria-hidden="true"></i>
+                                <?php if ($unreadNotifications > 0): ?>
+                                    <span class="badge badge-notif" aria-live="polite" data-badge="notif"><?php echo $unreadNotifications > 99 ? '99+' : $unreadNotifications; ?></span>
+                                <?php endif; ?>
+                            </a>
+                            <div class="dropdown-menu dropdown-menu-right shadow-sm" aria-labelledby="notifMenu" id="notifDropdown" role="menu" style="min-width:320px;">
+                                <div class="px-3 py-2 small text-muted">Centre de notifications — dernières alertes</div>
+                                <div class="dropdown-divider" role="separator"></div>
+                                <?php if (!empty($recentNotifications)): ?>
+                                    <?php foreach ($recentNotifications as $n): ?>
+                                        <a class="dropdown-item <?php echo empty($n['is_read']) ? 'font-weight-bold' : ''; ?>" href="#" role="menuitem">
+                                            <div class="small text-muted"><?php echo htmlspecialchars($n['type'] ?? '', ENT_QUOTES); ?> • <?php echo htmlspecialchars((new DateTime($n['created_at']))->format('d/m/Y H:i')); ?></div>
+                                            <div><?php echo htmlspecialchars(mb_strimwidth($n['message'] ?? '', 0, 120, '…')); ?></div>
+                                        </a>
+                                    <?php endforeach; ?>
+                                    <div class="dropdown-divider"></div>
+                                    <a class="dropdown-item text-center small" href="admin/notifications.php">Voir toutes les notifications</a>
+                                <?php else: ?>
+                                    <div class="dropdown-item small text-muted">Aucune notification récente.</div>
+                                <?php endif; ?>
+                            </div>
+                        </li>
+                    <?php endif; ?>
+
+                    <!-- User dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userMenu" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Menu utilisateur">
+                            <i class="bi bi-person-circle" aria-hidden="true"></i>
+                            <span class="d-none d-lg-inline ml-1"><?php echo htmlspecialchars($_SESSION['user_name'] ?? $_SESSION['admin_name'] ?? 'Profil', ENT_QUOTES); ?></span>
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-right" aria-labelledby="userMenu" role="menu">
+                            <a class="dropdown-item" href="profile.php" role="menuitem"><i class="bi bi-person me-1"></i> Mon profil</a>
+                            <a class="dropdown-item" href="orders_invoices.php" role="menuitem"><i class="bi bi-card-list me-1"></i> Mes commandes</a>
+                            <div class="dropdown-divider" role="separator"></div>
+                            <?php if ($adminRole): ?>
+                                <a class="dropdown-item" href="admin/dashboard.php" role="menuitem"><i class="bi bi-speedometer2 me-1"></i> Administration</a>
+                            <?php endif; ?>
+                            <a class="dropdown-item" href="logout.php" role="menuitem"><i class="bi bi-box-arrow-right me-1"></i> Déconnexion</a>
+                        </div>
+                    </li>
                 <?php else: ?>
-                    <li class="nav-item"><a class="nav-link" href="register.php">Inscription</a></li>
-                    <li class="nav-item"><a class="nav-link" href="login.php">Connexion</a></li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo isActive('/register.php'); ?>" href="register.php"><i class="bi bi-pencil-square"></i> Inscription</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo isActive('/login.php'); ?>" href="login.php"><i class="bi bi-box-arrow-in-right"></i> Connexion</a>
+                    </li>
                 <?php endif; ?>
             </ul>
-        </nav>
-        <form action="search.php" method="get" class="form-inline">
-            <input type="text" name="query" class="form-control mr-sm-2" placeholder="Rechercher des produits">
-            <button type="submit" class="btn btn-outline-success">Rechercher</button>
-        </form>
-        <?php if (!empty($_SESSION['is_demo']) && $_SESSION['is_demo'] == 1): ?>
-            <div class="mt-2 mb-0 text-center">
-                <span class="badge bg-warning text-dark" style="font-size:1rem;">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i> Mode Démo
-                    <a href="admin/how_it_works.php?page=demo" class="ms-2 text-dark" title="À propos du mode démo">
-                        <i class="bi bi-info-circle"></i>
-                    </a>
-                </span>
-            </div>
-        <?php endif; ?>
-    </header>
-</body>
-</html>
+        </div>
+    </div>
+</nav>
+
+<!-- Mobile search floating container -->
+<div id="mobileSearchContainer" aria-hidden="true">
+    <div class="container-fluid">
+        <div class="mobile-search-box">
+            <form action="search.php" method="get" class="d-flex w-100" role="search" aria-label="Recherche mobile">
+                <label for="navSearchMobile" class="sr-only">Rechercher</label>
+                <input id="navSearchMobile" type="search" name="query" class="form-control form-control-sm" placeholder="Rechercher des produits..." value="<?php echo htmlspecialchars($_GET['query'] ?? '', ENT_QUOTES); ?>">
+                <button class="btn btn-outline-light btn-sm" type="submit" aria-label="Lancer la recherche"><i class="bi bi-search"></i></button>
+                <button type="button" class="btn btn-link text-white ml-2" id="mobileSearchClose" aria-label="Fermer la recherche">Annuler</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+</header>
+
+<!-- Lightweight enhancement JS: accessible keyboard behaviour, mobile search toggle, graceful fallback if jQuery missing -->
+<script>
+(function(){
+    // Mobile search toggle
+    var toggle = document.getElementById('mobileSearchToggle');
+    var container = document.getElementById('mobileSearchContainer');
+    var closeBtn = document.getElementById('mobileSearchClose');
+
+    function showMobileSearch() {
+        if (container) {
+            container.classList.add('show');
+            container.setAttribute('aria-hidden','false');
+            // focus input
+            var input = document.getElementById('navSearchMobile');
+            if (input) input.focus();
+        }
+    }
+    function hideMobileSearch() {
+        if (container) {
+            container.classList.remove('show');
+            container.setAttribute('aria-hidden','true');
+            // return focus to toggle for accessibility
+            if (toggle) toggle.focus();
+        }
+    }
+
+    if (toggle) {
+        toggle.addEventListener('click', function(e){
+            e.preventDefault();
+            if (container && container.classList.contains('show')) hideMobileSearch(); else showMobileSearch();
+        });
+    }
+    if (closeBtn) closeBtn.addEventListener('click', function(){ hideMobileSearch(); });
+
+    // Close mobile search on Escape
+    document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') {
+            hideMobileSearch();
+            // close open dropdowns if bootstrap is available
+            try {
+                if (window.jQuery) {
+                    var open = document.querySelectorAll('.dropdown-menu.show');
+                    open.forEach(function(d){ try { $(d).closest('.dropdown').find('[data-toggle="dropdown"]').dropdown('hide'); } catch(e){ d.classList.remove('show'); }});
+                }
+            } catch(err){}
+        }
+    });
+
+    // Keyboard: open dropdowns on Enter/Space for elements that have data-toggle
+    document.querySelectorAll('[data-toggle="dropdown"]').forEach(function(btn){
+        btn.addEventListener('keyup', function(e){
+            if (e.key === 'Enter' || e.key === ' ') {
+                try { $(btn).dropdown('toggle'); } catch(e){ btn.click(); }
+            }
+        });
+    });
+
+    // Progressive: if bootstrap/js not loaded yet, the markup still functions as normal links.
+})();
+</script>
+
+<!-- Note: footer.php should inclure les scripts JS globaux (jQuery/bootstrap.bundle) en bas de page pour performance -->
+<!-- header.php laisse l'ouverture <body> en place ; le footer ferme body et html -->

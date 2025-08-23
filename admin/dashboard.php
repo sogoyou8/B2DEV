@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
@@ -11,6 +11,11 @@ include '../includes/db.php';
 require_once '../includes/classes/Product.php';
 require_once '../includes/classes/Notification.php';
 require_once '../includes/classes/Order.php';
+
+// Ensure admin visual style is applied (many admin pages add this)
+?>
+<script>try { document.body.classList.add('admin-page'); } catch(e){}</script>
+<?php
 
 // === STATISTIQUES PRINCIPALES ===
 
@@ -29,13 +34,35 @@ $yesterday_stats = [
     'new_users' => $pdo->query("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)")->fetchColumn(),
 ];
 
+// Statistiques de la semaine pour plus de contexte
+$week_stats = [
+    'orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE WEEK(order_date) = WEEK(CURDATE()) AND YEAR(order_date) = YEAR(CURDATE())")->fetchColumn(),
+    'revenue' => $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE WEEK(order_date) = WEEK(CURDATE()) AND YEAR(order_date) = YEAR(CURDATE())")->fetchColumn(),
+    'new_users' => $pdo->query("SELECT COUNT(*) FROM users WHERE WEEK(created_at) = WEEK(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())")->fetchColumn(),
+    'products_sold' => $pdo->query("SELECT COALESCE(SUM(od.quantity), 0) FROM order_details od JOIN orders o ON od.order_id = o.id WHERE WEEK(o.order_date) = WEEK(CURDATE()) AND YEAR(o.order_date) = YEAR(CURDATE())")->fetchColumn()
+];
+
+// Statistiques du mois
+$month_stats = [
+    'orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE MONTH(order_date) = MONTH(CURDATE()) AND YEAR(order_date) = YEAR(CURDATE())")->fetchColumn(),
+    'revenue' => $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE MONTH(order_date) = MONTH(CURDATE()) AND YEAR(order_date) = YEAR(CURDATE())")->fetchColumn(),
+    'new_users' => $pdo->query("SELECT COUNT(*) FROM users WHERE MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())")->fetchColumn(),
+    'products_sold' => $pdo->query("SELECT COALESCE(SUM(od.quantity), 0) FROM order_details od JOIN orders o ON od.order_id = o.id WHERE MONTH(o.order_date) = MONTH(CURDATE()) AND YEAR(o.order_date) = YEAR(CURDATE())")->fetchColumn()
+];
+
+// Moyenne par commande aujourd'hui
+$avg_order_today = $today_stats['orders'] > 0 ? $today_stats['revenue'] / $today_stats['orders'] : 0;
+$avg_order_month = $month_stats['orders'] > 0 ? $month_stats['revenue'] / $month_stats['orders'] : 0;
+
 // Calcul des pourcentages de variation
-function calculatePercentageChange($current, $previous) {
-    if ($previous == 0) return $current > 0 ? 100 : 0;
-    return round((($current - $previous) / $previous) * 100, 1);
+if (!function_exists('calculatePercentageChange')) {
+    function calculatePercentageChange($current, $previous) {
+        if ($previous == 0) return $current > 0 ? 100 : 0;
+        return round((($current - $previous) / $previous) * 100, 1);
+    }
 }
 
-// Statistiques globales
+// Statistiques globales avec plus de détails
 $global_stats = [
     'total_products' => $pdo->query("SELECT COUNT(*) FROM items")->fetchColumn(),
     'total_users' => $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'user'")->fetchColumn(),
@@ -43,15 +70,23 @@ $global_stats = [
     'total_revenue' => $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders")->fetchColumn(),
     'low_stock_count' => $pdo->query("SELECT COUNT(*) FROM items WHERE stock <= stock_alert_threshold")->fetchColumn(),
     'pending_orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'pending'")->fetchColumn(),
-    'unread_notifications' => $pdo->query("SELECT COUNT(*) FROM notifications WHERE is_read = 0")->fetchColumn()
+    'unread_notifications' => $pdo->query("SELECT COUNT(*) FROM notifications WHERE is_read = 0")->fetchColumn(),
+    'delivered_orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'delivered'")->fetchColumn(),
+    'shipped_orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'shipped'")->fetchColumn(),
+    'cancelled_orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'cancelled'")->fetchColumn(),
+    'monthly_revenue' => $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE MONTH(order_date) = MONTH(CURDATE()) AND YEAR(order_date) = YEAR(CURDATE())")->fetchColumn(),
+    'avg_order_value' => $pdo->query("SELECT COALESCE(AVG(total_price), 0) FROM orders")->fetchColumn(),
+    'total_admins' => $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn(),
+    'active_categories' => $pdo->query("SELECT COUNT(DISTINCT category) FROM items WHERE category IS NOT NULL AND category != ''")->fetchColumn()
 ];
 
-// Alerte stock critique
-$critical_stock = $pdo->query("SELECT name, stock FROM items WHERE stock = 0 OR stock <= 2 ORDER BY stock ASC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
+// Alerte stock critique avec plus de détails
+$critical_stock = $pdo->query("SELECT name, stock, stock_alert_threshold, category, price FROM items WHERE stock = 0 OR stock <= 2 ORDER BY stock ASC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
 
-// Top 5 produits les plus vendus (30 derniers jours)
+// Top 5 produits les plus vendus (30 derniers jours) avec plus d'infos
 $top_products = $pdo->query("
-    SELECT i.name, SUM(od.quantity) as total_sold, SUM(od.quantity * od.price) as revenue
+    SELECT i.name, i.price, i.stock, i.category, SUM(od.quantity) as total_sold, SUM(od.quantity * od.price) as revenue,
+           COUNT(DISTINCT o.user_id) as unique_customers
     FROM order_details od 
     JOIN items i ON od.item_id = i.id 
     JOIN orders o ON od.order_id = o.id 
@@ -61,589 +96,1569 @@ $top_products = $pdo->query("
     LIMIT 5
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Commandes récentes
+// Commandes récentes avec plus d'informations (limitées à 5)
 $recent_orders = $pdo->query("
-    SELECT o.id, u.name as user_name, o.total_price, o.status, o.order_date
+    SELECT o.id, u.name as user_name, u.email, o.total_price, o.status, o.order_date, o.user_id,
+           DATE_FORMAT(o.order_date, '%d/%m %H:%i') as formatted_date,
+           DATE_FORMAT(o.order_date, '%W') as day_name,
+           COUNT(od.id) as items_count,
+           SUM(od.quantity) as total_items
     FROM orders o 
     JOIN users u ON o.user_id = u.id 
+    LEFT JOIN order_details od ON o.id = od.order_id
+    GROUP BY o.id
     ORDER BY o.order_date DESC 
     LIMIT 5
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Données pour l'évolution du stock
-$stock_data = $pdo->query("SELECT name, stock FROM items ORDER BY name LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
+// Données pour l'évolution du stock (limitées à 8 avec plus d'infos)
+$stock_data = $pdo->query("
+    SELECT name, stock, stock_alert_threshold, category, price,
+           CASE 
+               WHEN stock = 0 THEN 'Rupture'
+               WHEN stock <= stock_alert_threshold THEN 'Critique'
+               WHEN stock <= stock_alert_threshold * 2 THEN 'Faible'
+               ELSE 'Correct'
+           END as status_stock
+    FROM items 
+    ORDER BY stock ASC, name 
+    LIMIT 8
+")->fetchAll(PDO::FETCH_ASSOC);
 
-// Données pour les ventes par mois (12 derniers mois)
+// Données pour les ventes par mois (6 derniers mois) avec évolution
 $sales_data = array_reverse($pdo->query("
     SELECT DATE_FORMAT(o.order_date, '%Y-%m') as period, 
            DATE_FORMAT(o.order_date, '%M %Y') as label,
            SUM(od.quantity) as total,
-           SUM(o.total_price) as revenue
+           SUM(o.total_price) as revenue,
+           COUNT(DISTINCT o.id) as orders_count,
+           COUNT(DISTINCT o.user_id) as unique_customers,
+           AVG(o.total_price) as avg_order_value
     FROM order_details od
     JOIN orders o ON od.order_id = o.id
-    WHERE o.order_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+    WHERE o.order_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
     GROUP BY period
     ORDER BY period DESC
-    LIMIT 12
+    LIMIT 6
 ")->fetchAll(PDO::FETCH_ASSOC));
 
-// Données pour les prévisions
+// Données pour les prédictions avec plus de détails
 $previsions_data = $pdo->query("
-    SELECT i.name, p.quantite_prevue
+    SELECT i.name, i.stock, i.category, p.quantite_prevue, p.confidence_score, p.trend_direction,
+           (p.quantite_prevue - i.stock) as stock_diff,
+           CASE 
+               WHEN p.quantite_prevue > i.stock * 2 THEN 'Forte demande'
+               WHEN p.quantite_prevue > i.stock THEN 'Demande élevée'
+               WHEN p.quantite_prevue < i.stock / 2 THEN 'Demande faible'
+               ELSE 'Demande stable'
+           END as demand_status
     FROM previsions p
     JOIN items i ON p.item_id = i.id
     WHERE p.date_prevision = DATE_FORMAT(DATE_ADD(NOW(), INTERVAL 1 MONTH), '%Y-%m-01')
-    LIMIT 8
+    ORDER BY p.quantite_prevue DESC
+    LIMIT 6
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Statistiques de performance
+$performance_stats = [
+    'conversion_rate' => $pdo->query("
+        SELECT ROUND(
+            (COUNT(DISTINCT o.user_id) * 100.0 / NULLIF(COUNT(DISTINCT u.id), 0)), 2
+        ) as rate
+        FROM users u 
+        LEFT JOIN orders o ON u.id = o.user_id 
+        WHERE u.role = 'user'
+    ")->fetchColumn() ?: 0,
+    'repeat_customers' => $pdo->query("
+        SELECT COUNT(*) FROM (
+            SELECT user_id FROM orders GROUP BY user_id HAVING COUNT(*) > 1
+        ) as repeat_users
+    ")->fetchColumn(),
+    'avg_items_per_order' => $pdo->query("
+        SELECT COALESCE(AVG(total_items), 0) FROM (
+            SELECT SUM(quantity) as total_items FROM order_details GROUP BY order_id
+        ) as order_totals
+    ")->fetchColumn()
+];
+
+// Notifications récentes par type
+$notifications_by_type = $pdo->query("
+    SELECT type, COUNT(*) as count, 
+           SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread_count
+    FROM notifications 
+    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    GROUP BY type
+    ORDER BY count DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 
-<main class="container-fluid py-4">
+<main id="dashboardRoot" class="container-fluid professional-dashboard">
     <!-- Messages de feedback -->
     <?php if (isset($_SESSION['success_message'])): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <div class="alert alert-success alert-dismissible fade show professional-alert" role="alert">
             <i class="bi bi-check-circle me-2"></i><?php echo $_SESSION['success_message']; ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
         <?php unset($_SESSION['success_message']); ?>
     <?php endif; ?>
 
-    <!-- Header du Dashboard -->
-    <div class="row mb-4">
+    <!-- Header du Dashboard professionnel -->
+    <div class="row mb-3">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1 class="h2 mb-1">🏪 Dashboard Admin</h1>
-                    <p class="text-muted mb-0">
-                        Bienvenue, <strong><?php echo htmlspecialchars($_SESSION['admin_name']); ?></strong> • 
-                        <i class="bi bi-calendar3 me-1"></i><?php echo date('d/m/Y H:i'); ?>
-                    </p>
-                </div>
-                <div>
-                    <button class="btn btn-outline-primary me-2" onclick="location.reload()">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Actualiser
-                    </button>
-                    <a href="notifications.php" class="btn btn-primary position-relative">
-                        <i class="bi bi-bell me-1"></i>Notifications
-                        <?php if ($global_stats['unread_notifications'] > 0): ?>
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                                <?php echo $global_stats['unread_notifications']; ?>
-                            </span>
-                        <?php endif; ?>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- === STATISTIQUES PRINCIPALES === -->
-    <div class="row mb-4">
-        <!-- Commandes Aujourd'hui -->
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card border-primary stats-card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-subtitle mb-2 text-primary">Commandes Aujourd'hui</h6>
-                            <h2 class="card-title mb-1"><?php echo $today_stats['orders']; ?></h2>
-                            <?php $orders_change = calculatePercentageChange($today_stats['orders'], $yesterday_stats['orders']); ?>
-                            <small class="text-<?php echo $orders_change >= 0 ? 'success' : 'danger'; ?>">
-                                <i class="bi bi-arrow-<?php echo $orders_change >= 0 ? 'up' : 'down'; ?>"></i>
-                                <?php echo abs($orders_change); ?>% vs hier
-                            </small>
-                        </div>
-                        <div class="stats-icon bg-primary">
-                            <i class="bi bi-cart-check text-white"></i>
-                        </div>
+            <div class="dashboard-header">
+                <div class="header-content">
+                    <div class="header-title">
+                        <h1 class="h4 mb-1 fw-bold text-primary">
+                            <i class="bi bi-speedometer2 me-2"></i>Dashboard Admin
+                        </h1>
+                        <p class="text-muted mb-0">
+                            Aperçu complet de votre e-commerce - <?php echo date('d/m/Y H:i'); ?>
+                        </p>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Revenus Aujourd'hui -->
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card border-success stats-card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-subtitle mb-2 text-success">Revenus Aujourd'hui</h6>
-                            <h2 class="card-title mb-1"><?php echo number_format($today_stats['revenue'], 2); ?>€</h2>
-                            <?php $revenue_change = calculatePercentageChange($today_stats['revenue'], $yesterday_stats['revenue']); ?>
-                            <small class="text-<?php echo $revenue_change >= 0 ? 'success' : 'danger'; ?>">
-                                <i class="bi bi-arrow-<?php echo $revenue_change >= 0 ? 'up' : 'down'; ?>"></i>
-                                <?php echo abs($revenue_change); ?>% vs hier
-                            </small>
-                        </div>
-                        <div class="stats-icon bg-success">
-                            <i class="bi bi-currency-euro text-white"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Nouveaux Utilisateurs -->
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card border-info stats-card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-subtitle mb-2 text-info">Nouveaux Utilisateurs</h6>
-                            <h2 class="card-title mb-1"><?php echo $today_stats['new_users']; ?></h2>
-                            <?php $users_change = calculatePercentageChange($today_stats['new_users'], $yesterday_stats['new_users']); ?>
-                            <small class="text-<?php echo $users_change >= 0 ? 'success' : 'danger'; ?>">
-                                <i class="bi bi-arrow-<?php echo $users_change >= 0 ? 'up' : 'down'; ?>"></i>
-                                <?php echo abs($users_change); ?>% vs hier
-                            </small>
-                        </div>
-                        <div class="stats-icon bg-info">
-                            <i class="bi bi-person-plus text-white"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Produits Vendus -->
-        <div class="col-xl-3 col-md-6 mb-3">
-            <div class="card border-warning stats-card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-subtitle mb-2 text-warning">Produits Vendus</h6>
-                            <h2 class="card-title mb-1"><?php echo $today_stats['products_sold']; ?></h2>
-                            <small class="text-muted">
-                                <i class="bi bi-box"></i>
-                                Aujourd'hui
-                            </small>
-                        </div>
-                        <div class="stats-icon bg-warning">
-                            <i class="bi bi-graph-up text-white"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- === ALERTES ET NOTIFICATIONS === -->
-    <?php if ($critical_stock || $global_stats['pending_orders'] > 0): ?>
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="alert alert-warning border-0 shadow-sm">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-exclamation-triangle-fill me-3 fs-4"></i>
-                    <div class="flex-grow-1">
-                        <h5 class="alert-heading mb-1">Attention requise</h5>
-                        <div class="row">
+                    <div class="header-actions">
+                        <!-- Alertes intégrées -->
+                        <?php if ($critical_stock || $global_stats['pending_orders'] > 0): ?>
+                        <div class="alert alert-warning border-0 shadow-sm professional-inline-alert">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
                             <?php if ($critical_stock): ?>
-                            <div class="col-md-6 mb-2">
-                                <strong>Stock critique :</strong> 
-                                <?php foreach ($critical_stock as $item): ?>
-                                    <span class="badge bg-danger me-1"><?php echo htmlspecialchars($item['name']); ?> (<?php echo $item['stock']; ?>)</span>
-                                <?php endforeach; ?>
-                            </div>
+                                <strong><?php echo count($critical_stock); ?></strong> produit(s) en stock critique
                             <?php endif; ?>
                             <?php if ($global_stats['pending_orders'] > 0): ?>
-                            <div class="col-md-6 mb-2">
-                                <strong>Commandes en attente :</strong> 
-                                <span class="badge bg-warning"><?php echo $global_stats['pending_orders']; ?> commande(s)</span>
-                            </div>
+                                • <strong><?php echo $global_stats['pending_orders']; ?></strong> commande(s) en attente
                             <?php endif; ?>
                         </div>
-                    </div>
-                    <div>
-                        <a href="notifications.php" class="btn btn-warning">
-                            <i class="bi bi-arrow-right me-1"></i>Voir détails
-                        </a>
+                        <?php endif; ?>
+                        
+                        <div class="action-buttons">
+                            <button onclick="exportStats()" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-download me-1"></i>Export CSV
+                            </button>
+                            <button onclick="printDashboard()" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-printer me-1"></i>Imprimer
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <?php endif; ?>
 
-    <!-- === GRAPHIQUES === -->
-    <div class="row mb-4">
-        <!-- Évolution des Ventes -->
-        <div class="col-xl-8 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Évolution des Ventes (12 mois)</h5>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-primary active" onclick="toggleSalesChart('quantity')">Quantité</button>
-                        <button type="button" class="btn btn-outline-primary" onclick="toggleSalesChart('revenue')">Revenus</button>
+    <!-- === LAYOUT PROFESSIONNEL 2x3 === -->
+    <!-- Première rangée : 3 cartes principales -->
+    <div class="row mb-3">
+        <!-- Statistiques Principales Détaillées -->
+        <div class="col-xl-4 col-lg-4 mb-3">
+            <div class="card professional-card stats-card border-primary">
+                <div class="card-header bg-gradient-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-white d-flex align-items-center">
+                            <i class="bi bi-graph-up me-2"></i>Statistiques Aujourd'hui
+                        </h5>
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-outline-light btn-sm me-1" onclick="exportStats()" title="Export CSV (Statistiques)">
+                                <i class="bi bi-download"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-light btn-sm me-1" onclick="printDashboard()" title="Imprimer">
+                                <i class="bi bi-printer"></i>
+                            </button>
+                            <a class="btn btn-outline-light btn-sm me-1" href="sales_history.php" title="Historique détaillé">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </a>
+
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="sales_history.php">Historique détaillé</a></li>
+                                <li><a class="dropdown-item" href="list_orders.php">Voir commandes</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
-                    <canvas id="salesChart" height="100"></canvas>
+                    <!-- Grille des statistiques principales -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <div class="stat-card border-primary">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="stat-label">Commandes</div>
+                                        <div class="stat-number text-primary"><?php echo $today_stats['orders']; ?></div>
+                                        <div class="stat-trend text-<?php echo calculatePercentageChange($today_stats['orders'], $yesterday_stats['orders']) >= 0 ? 'success' : 'danger'; ?>">
+                                            <i class="bi bi-arrow-<?php echo calculatePercentageChange($today_stats['orders'], $yesterday_stats['orders']) >= 0 ? 'up' : 'down'; ?>"></i>
+                                            <?php echo abs(calculatePercentageChange($today_stats['orders'], $yesterday_stats['orders'])); ?>%
+                                        </div>
+                                    </div>
+                                    <div class="stat-icon bg-primary text-white">
+                                        <i class="bi bi-cart-check"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-6">
+                            <div class="stat-card border-success">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="stat-label">Revenus</div>
+                                        <div class="stat-number text-success"><?php echo number_format($today_stats['revenue'], 0); ?>€</div>
+                                        <div class="stat-trend text-<?php echo calculatePercentageChange($today_stats['revenue'], $yesterday_stats['revenue']) >= 0 ? 'success' : 'danger'; ?>">
+                                            <i class="bi bi-arrow-<?php echo calculatePercentageChange($today_stats['revenue'], $yesterday_stats['revenue']) >= 0 ? 'up' : 'down'; ?>"></i>
+                                            <?php echo abs(calculatePercentageChange($today_stats['revenue'], $yesterday_stats['revenue'])); ?>%
+                                        </div>
+                                    </div>
+                                    <div class="stat-icon bg-success text-white">
+                                        <i class="bi bi-currency-euro"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-6">
+                            <div class="stat-card border-info">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="stat-label">Utilisateurs</div>
+                                        <div class="stat-number text-info"><?php echo $today_stats['new_users']; ?></div>
+                                        <div class="stat-trend text-<?php echo calculatePercentageChange($today_stats['new_users'], $yesterday_stats['new_users']) >= 0 ? 'success' : 'danger'; ?>">
+                                            <i class="bi bi-arrow-<?php echo calculatePercentageChange($today_stats['new_users'], $yesterday_stats['new_users']) >= 0 ? 'up' : 'down'; ?>"></i>
+                                            <?php echo abs(calculatePercentageChange($today_stats['new_users'], $yesterday_stats['new_users'])); ?>%
+                                        </div>
+                                    </div>
+                                    <div class="stat-icon bg-info text-white">
+                                        <i class="bi bi-people"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-6">
+                            <div class="stat-card border-warning">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="stat-label">Produits vendus</div>
+                                        <div class="stat-number text-warning"><?php echo $today_stats['products_sold']; ?></div>
+                                        <div class="stat-trend text-muted">
+                                            <i class="bi bi-box-seam"></i>
+                                            Total
+                                        </div>
+                                    </div>
+                                    <div class="stat-icon bg-warning text-white">
+                                        <i class="bi bi-box"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Résumé des performances -->
+                    <div class="performance-summary">
+                        <h6 class="fw-bold text-primary mb-2">
+                            <i class="bi bi-bullseye me-1"></i>Performances Clés
+                        </h6>
+                        <div class="row g-2 text-center">
+                            <div class="col-4">
+                                <div class="small text-muted">Panier moyen</div>
+                                <div class="fw-bold text-primary"><?php echo number_format($avg_order_today, 0); ?>€</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="small text-muted">Conv. Rate</div>
+                                <div class="fw-bold text-success"><?php echo $performance_stats['conversion_rate']; ?>%</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="small text-muted">Articles/Cmd</div>
+                                <div class="fw-bold text-info"><?php echo number_format($performance_stats['avg_items_per_order'], 1); ?></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Indicateurs de performance -->
+                    <div class="mt-3 pt-3 border-top">
+                        <div class="row g-2 text-center">
+                            <div class="col-6">
+                                <div class="small text-muted">Cette semaine</div>
+                                <div class="fw-bold"><?php echo $week_stats['orders']; ?> commandes</div>
+                                <div class="small text-success"><?php echo number_format($week_stats['revenue'], 0); ?>€</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">Ce mois</div>
+                                <div class="fw-bold"><?php echo $month_stats['orders']; ?> commandes</div>
+                                <div class="small text-success"><?php echo number_format($month_stats['revenue'], 0); ?>€</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Stock par Produit -->
-        <div class="col-xl-4 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header bg-transparent">
-                    <h5 class="mb-0"><i class="bi bi-boxes me-2"></i>Stock par Produit</h5>
+        <!-- Évolution des Ventes Détaillée -->
+        <div class="col-xl-4 col-lg-4 mb-3">
+            <div class="card professional-card chart-card sales-card border-secondary">
+                <div class="card-header bg-gradient-secondary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-white d-flex align-items-center">
+                            <i class="bi bi-graph-up-arrow me-2"></i>Évolution des Ventes (6 mois)
+                        </h5>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-light active" onclick="toggleSalesChart('quantity', this)">Qté</button>
+                            <button type="button" class="btn btn-outline-light" onclick="toggleSalesChart('revenue', this)">€</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <canvas id="stockChart"></canvas>
+                    <canvas id="salesChart" height="180"></canvas>
+                    
+                    <!-- Données détaillées sur les ventes -->
+                    <div class="mt-3 pt-3 border-top">
+                        <h6 class="fw-bold mb-2">
+                            <i class="bi bi-bar-chart me-1"></i>Tendances & Insights
+                        </h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="small text-muted">Mois le + fort</div>
+                                <?php 
+                                $best_month = !empty($sales_data) ? max($sales_data) : ['revenue' => 0, 'label' => 'N/A'];
+                                ?>
+                                <div class="fw-bold text-success"><?php echo $best_month['label'] ?? 'N/A'; ?></div>
+                                <div class="small"><?php echo number_format($best_month['revenue'] ?? 0, 0); ?>€</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">Croissance</div>
+                                <?php 
+                                $growth = 0;
+                                if (count($sales_data) >= 2) {
+                                    $current = $sales_data[count($sales_data)-1]['revenue'];
+                                    $previous = $sales_data[count($sales_data)-2]['revenue'];
+                                    $growth = calculatePercentageChange($current, $previous);
+                                }
+                                ?>
+                                <div class="fw-bold text-<?php echo $growth >= 0 ? 'success' : 'danger'; ?>">
+                                    <?php echo abs($growth); ?>%
+                                </div>
+                                <div class="small">
+                                    <i class="bi bi-arrow-<?php echo $growth >= 0 ? 'up' : 'down'; ?>"></i>
+                                    vs mois dernier
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <?php if (!empty($sales_data)): ?>
+                        <div class="row g-2 mt-2">
+                            <div class="col-12">
+                                <div class="small text-muted">Clients uniques (6 mois)</div>
+                                <div class="fw-bold text-primary">
+                                    <?php echo array_sum(array_column($sales_data, 'unique_customers')); ?> clients
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestion Stock Avancée -->
+        <div class="col-xl-4 col-lg-4 mb-3">
+            <div class="card professional-card chart-card stock-card border-dark">
+                <div class="card-header bg-gradient-dark text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-white d-flex align-items-center">
+                            <i class="bi bi-boxes me-2"></i>Gestion Stock
+                        </h5>
+                        <a href="bulk_update_products.php" class="btn btn-outline-light btn-sm">Gérer</a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <canvas id="stockChart" height="140"></canvas>
+                    
+                    <!-- Alertes stock critique -->
+                    <div class="mt-3 pt-3 border-top">
+                        <h6 class="fw-bold text-danger mb-2">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Alertes Stock Critique
+                        </h6>
+                        <?php if ($critical_stock): ?>
+                            <div class="stock-alerts">
+                                <?php foreach ($critical_stock as $item): ?>
+                                <div class="alert alert-sm alert-danger d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars($item['name']); ?></strong>
+                                        <br><small class="text-muted"><?php echo htmlspecialchars($item['category']); ?></small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-danger"><?php echo $item['stock']; ?></span>
+                                        <br><small class="text-muted">Seuil: <?php echo $item['stock_alert_threshold']; ?></small>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="text-center text-success">
+                                <i class="bi bi-check-circle display-6"></i>
+                                <p class="mb-0">Aucune alerte stock</p>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <!-- Statistiques globales stock -->
+                        <div class="row g-2 mt-3 pt-2 border-top">
+                            <div class="col-6">
+                                <div class="small text-muted">Total produits</div>
+                                <div class="fw-bold text-primary"><?php echo $global_stats['total_products']; ?></div>
+                            </div>
+                            <div class="col-6">
+                                <div class="small text-muted">Stock faible</div>
+                                <div class="fw-bold text-warning"><?php echo $global_stats['low_stock_count']; ?></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- === PRÉDICTIONS IA & TOP PRODUITS === -->
-    <div class="row mb-4">
-        <!-- Prédictions IA -->
-        <div class="col-xl-6 mb-4">
-            <div class="card h-100 shadow-sm border-success">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="bi bi-robot me-2"></i>Prédictions IA - Mois Prochain</h5>
+    <!-- Deuxième rangée : 3 cartes analytiques -->
+    <div class="row">
+        <!-- Prédictions IA Avancées - VERSION OPTIMISÉE -->
+        <div class="col-xl-4 col-lg-4 mb-3">
+            <div class="card professional-card ai-card border-success">
+                <div class="card-header bg-gradient-success text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-white d-flex align-items-center">
+                            <i class="bi bi-robot me-2"></i>Prédictions IA
+                        </h5>
+                        <a href="prediction.php" class="btn btn-outline-light btn-sm">Configurer</a>
+                    </div>
                 </div>
-                <div class="card-body" style="height:320px;display:flex;align-items:center;justify-content:center;">
+                <div class="card-body">
                     <?php if ($previsions_data): ?>
-                        <canvas id="previsionChart" style="max-height:260px;max-width:100%;"></canvas>
-                        <div class="mt-3">
-                            <small class="text-muted">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Algorithme de régression linéaire basé sur l'historique des ventes
-                            </small>
+                        <!-- Graphique compact -->
+                        <div class="prediction-chart-container">
+                            <canvas id="previsionChart"></canvas>
+                        </div>
+                        
+                        <!-- Détails des prédictions -->
+                        <div class="card-section">
+                            <h6 class="fw-bold text-success mb-2">
+                                <i class="bi bi-lightbulb me-1"></i>Prédictions Mois Prochain
+                            </h6>
+                            <div class="prediction-details">
+                                <?php foreach (array_slice($previsions_data, 0, 4) as $pred): ?>
+                                <div class="d-flex justify-content-between align-items-center prediction-item">
+                                    <div style="min-width: 0; flex: 1;">
+                                        <strong class="text-truncate d-block" style="max-width: 100px; font-size: 0.85rem;">
+                                            <?php echo htmlspecialchars($pred['name']); ?>
+                                        </strong>
+                                        <small class="text-muted" style="font-size: 0.7rem;">
+                                            <?php echo $pred['demand_status']; ?>
+                                        </small>
+                                    </div>
+                                    <div class="text-end" style="flex-shrink: 0;">
+                                        <span class="badge bg-success" style="font-size: 0.7rem;">
+                                            <?php echo $pred['quantite_prevue']; ?>
+                                        </span>
+                                        <br><small class="text-muted" style="font-size: 0.65rem;">
+                                            Stock: <?php echo $pred['stock']; ?>
+                                        </small>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        
+                        <!-- Recommandations compactes -->
+                        <div class="card-section">
+                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.9rem;">
+                                <i class="bi bi-cpu me-1"></i>Recommandations
+                            </h6>
+                            <div class="prediction-recommendations">
+                                <ul class="list-unstyled mb-0" style="font-size: 0.8rem;">
+                                    <?php 
+                                    $high_demand = array_filter($previsions_data, function($p) { return $p['demand_status'] === 'Forte demande'; });
+                                    if ($high_demand): ?>
+                                    <li class="text-warning mb-1">
+                                        <i class="bi bi-arrow-up me-1"></i>Réappro. <?php echo count($high_demand); ?> produit(s)
+                                    </li>
+                                    <?php endif; ?>
+                                    <li class="text-info">
+                                        <i class="bi bi-graph-up me-1"></i><?php echo count($previsions_data); ?> produits analysés
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     <?php else: ?>
                         <div class="text-center py-4">
-                            <i class="bi bi-gear text-muted" style="font-size: 3rem;"></i>
-                            <p class="mt-3 text-muted">Prédictions en cours de génération...</p>
-                            <a href="prediction.php" class="btn btn-success">
-                                <i class="bi bi-arrow-right me-1"></i>Générer prédictions
-                            </a>
+                            <i class="bi bi-robot display-4 text-muted"></i>
+                            <h6 class="text-muted">Aucune prédiction disponible</h6>
+                            <p class="text-muted small">Générez des prédictions IA pour optimiser votre stock</p>
+                            <a href="prediction.php" class="btn btn-outline-primary btn-sm">Générer maintenant</a>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
 
-        <!-- Top Produits -->
-        <div class="col-xl-6 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header bg-transparent">
-                    <h5 class="mb-0"><i class="bi bi-trophy me-2"></i>Top Produits (30 derniers jours)</h5>
+        <!-- Commandes Récentes - VERSION OPTIMISÉE -->
+        <div class="col-xl-4 col-lg-4 mb-3">
+            <div class="card professional-card orders-card-new orders-card border-info">
+                <div class="card-header bg-gradient-info text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-white d-flex align-items-center">
+                            <i class="bi bi-receipt me-2"></i>Commandes Récentes
+                        </h5>
+                        <a href="list_orders.php" class="btn btn-outline-light btn-sm">Toutes</a>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <?php if ($top_products): ?>
-                        <div class="list-group list-group-flush">
-                            <?php foreach ($top_products as $index => $product): ?>
-                            <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                <div class="d-flex align-items-center">
-                                    <span class="badge bg-primary rounded-pill me-3"><?php echo $index + 1; ?></span>
-                                    <div>
-                                        <h6 class="mb-1"><?php echo htmlspecialchars($product['name']); ?></h6>
-                                        <small class="text-muted"><?php echo $product['total_sold']; ?> vendus</small>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <strong class="text-success"><?php echo number_format($product['revenue'], 2); ?>€</strong>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <div class="text-center py-4 text-muted">
-                            <i class="bi bi-graph-down" style="font-size: 2rem;"></i>
-                            <p class="mt-2">Aucune vente récente</p>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- === COMMANDES RÉCENTES & ACTIONS RAPIDES === -->
-    <div class="row mb-4">
-        <!-- Commandes Récentes -->
-        <div class="col-xl-8 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Commandes Récentes</h5>
-                    <a href="list_orders.php" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-arrow-right me-1"></i>Voir tout
-                    </a>
-                </div>
-                <div class="card-body p-0">
                     <?php if ($recent_orders): ?>
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
+                        <!-- Table des commandes avec scroll -->
+                        <div class="orders-table-wrapper">
+                            <table class="table table-sm orders-table mb-0">
+                                <thead class="orders-table-head">
                                     <tr>
-                                        <th>Commande</th>
+                                        <th>ID</th>
                                         <th>Client</th>
-                                        <th>Montant</th>
+                                        <th>Total</th>
                                         <th>Statut</th>
                                         <th>Date</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody class="orders-table-body">
                                     <?php foreach ($recent_orders as $order): ?>
-                                    <tr>
-                                        <td><span class="fw-bold">#<?php echo $order['id']; ?></span></td>
-                                        <td><?php echo htmlspecialchars($order['user_name']); ?></td>
-                                        <td><strong><?php echo number_format($order['total_price'], 2); ?>€</strong></td>
-                                        <td>
-                                            <span class="badge bg-<?php 
-                                                echo match($order['status']) {
-                                                    'pending' => 'warning',
-                                                    'shipped' => 'info',
-                                                    'delivered' => 'success',
-                                                    'cancelled' => 'danger',
-                                                    default => 'secondary'
-                                                };
-                                            ?>">
-                                                <?php echo ucfirst($order['status']); ?>
+                                    <tr class="order-row-new">
+                                        <td class="order-id">
+                                            <strong>#<?php echo $order['id']; ?></strong>
+                                        </td>
+                                        <td class="order-client">
+                                            <div class="client-info">
+                                                <div class="client-name"><?php echo htmlspecialchars(substr($order['user_name'], 0, 12)); ?></div>
+                                                <div class="client-email"><?php echo htmlspecialchars(substr($order['email'], 0, 18)); ?></div>
+                                            </div>
+                                        </td>
+                                        <td class="order-total">
+                                            <div class="total-amount"><?php echo number_format($order['total_price'], 0); ?>€</div>
+                                            <div class="total-items"><?php echo $order['total_items']; ?> art.</div>
+                                        </td>
+                                        <td class="order-status">
+                                            <?php
+                                            $status_config = [
+                                                'pending' => ['class' => 'warning', 'text' => 'Pending'],
+                                                'shipped' => ['class' => 'info', 'text' => 'Shipped'],
+                                                'delivered' => ['class' => 'success', 'text' => 'Delivered'],
+                                                'cancelled' => ['class' => 'danger', 'text' => 'Cancelled']
+                                            ];
+                                            $config = $status_config[$order['status']] ?? ['class' => 'secondary', 'text' => 'Unknown'];
+                                            ?>
+                                            <span class="badge status-badge bg-<?php echo $config['class']; ?>">
+                                                <?php echo $config['text']; ?>
                                             </span>
                                         </td>
-                                        <td><small><?php echo date('d/m H:i', strtotime($order['order_date'])); ?></small></td>
+                                        <td class="order-date">
+                                            <div class="date-formatted"><?php echo $order['formatted_date']; ?></div>
+                                        </td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
+                        
+                        <!-- Résumé compact en bas -->
+                        <div class="orders-summary">
+                            <div class="summary-grid">
+                                <div class="summary-item">
+                                    <span class="summary-label">Attente</span>
+                                    <span class="summary-value text-warning"><?php echo $global_stats['pending_orders']; ?></span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Expédiées</span>
+                                    <span class="summary-value text-info"><?php echo $global_stats['shipped_orders']; ?></span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Livrées</span>
+                                    <span class="summary-value text-success"><?php echo $global_stats['delivered_orders']; ?></span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">Annulées</span>
+                                    <span class="summary-value text-danger"><?php echo $global_stats['cancelled_orders']; ?></span>
+                                </div>
+                            </div>
+                        </div>
                     <?php else: ?>
-                        <div class="text-center py-4 text-muted">
-                            <i class="bi bi-cart-x" style="font-size: 2rem;"></i>
-                            <p class="mt-2">Aucune commande récente</p>
+                        <div class="orders-empty">
+                            <i class="bi bi-receipt display-4 text-muted"></i>
+                            <h6 class="text-muted mt-2">Aucune commande récente</h6>
+                            <p class="text-muted small">Les nouvelles commandes apparaîtront ici</p>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
 
-        <!-- Actions Rapides -->
-        <div class="col-xl-4 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-transparent">
-                    <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Actions Rapides</h5>
+        <!-- Top Produits & Analytics -->
+        <div class="col-xl-4 col-lg-4 mb-3">
+            <div class="card professional-card products-card border-warning">
+                <div class="card-header bg-gradient-warning text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-white d-flex align-items-center">
+                            <i class="bi bi-trophy me-2"></i>Top Produits (30j)
+                        </h5>
+                        <a href="list_products.php" class="btn btn-outline-light btn-sm">Catalogue</a>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="list_products.php" class="btn btn-outline-primary btn-lg">
-                            <i class="bi bi-box me-2"></i>Gérer Produits
-                            <span class="badge bg-primary ms-auto"><?php echo $global_stats['total_products']; ?></span>
-                        </a>
-                        <a href="list_users.php" class="btn btn-outline-info btn-lg">
-                            <i class="bi bi-people me-2"></i>Gérer Utilisateurs
-                            <span class="badge bg-info ms-auto"><?php echo $global_stats['total_users']; ?></span>
-                        </a>
-                        <a href="list_orders.php" class="btn btn-outline-warning btn-lg">
-                            <i class="bi bi-cart me-2"></i>Gérer Commandes
-                            <span class="badge bg-warning ms-auto"><?php echo $global_stats['total_orders']; ?></span>
-                        </a>
-                        <a href="sales_history.php" class="btn btn-outline-success btn-lg">
-                            <i class="bi bi-graph-up me-2"></i>Historique Ventes
-                        </a>
-                        <a href="prediction.php" class="btn btn-success btn-lg">
-                            <i class="bi bi-robot me-2"></i>Prédictions IA
-                        </a>
-                        <a href="create_admin.php" class="btn btn-outline-secondary btn-lg">
-                            <i class="bi bi-person-plus me-2"></i>Créer Admin
-                        </a>
-                    </div>
+                    <?php if ($top_products): ?>
+                        <div class="top-products-list" style="max-height: 250px; overflow-y: auto;">
+                            <?php foreach ($top_products as $index => $product): ?>
+                            <div class="d-flex justify-content-between align-items-center product-item p-2 mb-2">
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-primary rank-badge me-2">#{<?php echo $index + 1; ?>}</span>
+                                    <div>
+                                        <div class="fw-bold"><?php echo htmlspecialchars(substr($product['name'], 0, 25)); ?>...</div>
+                                        <small class="text-muted"><?php echo htmlspecialchars($product['category']); ?> • <?php echo number_format($product['price'], 2); ?>€</small>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold text-success"><?php echo $product['total_sold']; ?> vendus</div>
+                                    <small class="text-muted"><?php echo number_format($product['revenue'], 0); ?>€ CA</small>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        
+                        <!-- Analyse des performances produits -->
+                        <div class="mt-3 pt-3 border-top">
+                            <h6 class="fw-bold mb-2">
+                                <i class="bi bi-graph-up me-1"></i>Performance Globale
+                            </h6>
+                            <div class="row g-2 text-center">
+                                <div class="col-4">
+                                    <div class="small text-muted">CA Top 5</div>
+                                    <div class="fw-bold text-success">
+                                        <?php echo number_format(array_sum(array_column($top_products, 'revenue')), 0); ?>€
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="small text-muted">Clients uniques</div>
+                                    <div class="fw-bold text-info">
+                                        <?php echo array_sum(array_column($top_products, 'unique_customers')); ?>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="small text-muted">Catégories</div>
+                                    <div class="fw-bold text-primary"><?php echo $global_stats['active_categories']; ?></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Notifications système -->
+                        <?php if ($notifications_by_type): ?>
+                        <div class="mt-3 pt-3 border-top">
+                            <h6 class="fw-bold mb-2">
+                                <i class="bi bi-bell me-1"></i>Notifications (7j)
+                            </h6>
+                            <?php foreach (array_slice($notifications_by_type, 0, 3) as $notif): ?>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted"><?php echo ucfirst($notif['type']); ?></small>
+                                <div>
+                                    <span class="badge bg-secondary"><?php echo $notif['count']; ?></span>
+                                    <?php if ($notif['unread_count'] > 0): ?>
+                                    <span class="badge bg-danger"><?php echo $notif['unread_count']; ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                            <div class="mt-2">
+                                <a href="notifications.php" class="btn btn-outline-primary btn-sm w-100">
+                                    Voir toutes les notifications
+                                </a>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                    <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="bi bi-graph-up display-4 text-muted"></i>
+                            <h6 class="text-muted">Aucune vente récente</h6>
+                            <p class="text-muted small">Les produits populaires apparaîtront ici</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- === STATISTIQUES GLOBALES === -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-transparent">
-                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Statistiques Globales</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row text-center">
-                        <div class="col-md-3 mb-3">
-                            <div class="border rounded p-3">
-                                <i class="bi bi-box text-primary" style="font-size: 2rem;"></i>
-                                <h4 class="mt-2"><?php echo $global_stats['total_products']; ?></h4>
-                                <small class="text-muted">Produits Total</small>
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <div class="border rounded p-3">
-                                <i class="bi bi-people text-info" style="font-size: 2rem;"></i>
-                                <h4 class="mt-2"><?php echo $global_stats['total_users']; ?></h4>
-                                <small class="text-muted">Utilisateurs</small>
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <div class="border rounded p-3">
-                                <i class="bi bi-cart text-warning" style="font-size: 2rem;"></i>
-                                <h4 class="mt-2"><?php echo $global_stats['total_orders']; ?></h4>
-                                <small class="text-muted">Commandes Total</small>
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <div class="border rounded p-3">
-                                <i class="bi bi-currency-euro text-success" style="font-size: 2rem;"></i>
-                                <h4 class="mt-2"><?php echo number_format($global_stats['total_revenue'], 0); ?>€</h4>
-                                <small class="text-muted">Revenus Total</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 </main>
 
-<!-- === CSS PERSONNALISÉ === -->
+<!-- === CSS PROFESSIONNEL === -->
+
 <style>
-.stats-card {
+#dashboardRoot {
+    height: calc(100vh - 140px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 0.5rem; /* évite que le contenu soit caché derrière la scrollbar */
+}    
+/* Dashboard professionnel */
+.professional-dashboard {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    padding: 1rem;
+}
+
+/* Header du dashboard */
+.dashboard-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.05);
+    margin-bottom: 1rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.header-title h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.professional-inline-alert {
+    border-radius: 8px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+    max-width: 300px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* === CARTES PROFESSIONNELLES UNIFORMISÉES === */
+.professional-card {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 12px;
     transition: all 0.3s ease;
-    border-left: 4px solid transparent;
+    overflow: hidden;
+    height: 100%;
+    /* HAUTEUR FIXE POUR UNIFORMISER */
+    min-height: 500px;
+    max-height: 500px;
+    display: flex;
+    flex-direction: column;
 }
 
-.stats-card:hover {
+/* Bordures colorées spécifiques */
+.professional-card.border-primary {
+    border-left: 4px solid #007bff !important;
+    border-top: 1px solid rgba(0, 123, 255, 0.2) !important;
+    border-right: 1px solid rgba(0, 123, 255, 0.2) !important;
+    border-bottom: 1px solid rgba(0, 123, 255, 0.2) !important;
+}
+
+.professional-card.border-secondary {
+    border-left: 4px solid #6c757d !important;
+    border-top: 1px solid rgba(108, 117, 125, 0.2) !important;
+    border-right: 1px solid rgba(108, 117, 125, 0.2) !important;
+    border-bottom: 1px solid rgba(108, 117, 125, 0.2) !important;
+}
+
+.professional-card.border-success {
+    border-left: 4px solid #28a745 !important;
+    border-top: 1px solid rgba(40, 167, 69, 0.2) !important;
+    border-right: 1px solid rgba(40, 167, 69, 0.2) !important;
+    border-bottom: 1px solid rgba(40, 167, 69, 0.2) !important;
+}
+
+.professional-card.border-info {
+    border-left: 4px solid #17a2b8 !important;
+    border-top: 1px solid rgba(23, 162, 184, 0.2) !important;
+    border-right: 1px solid rgba(23, 162, 184, 0.2) !important;
+    border-bottom: 1px solid rgba(23, 162, 184, 0.2) !important;
+}
+
+.professional-card.border-warning {
+    border-left: 4px solid #ffc107 !important;
+    border-top: 1px solid rgba(255, 193, 7, 0.2) !important;
+    border-right: 1px solid rgba(255, 193, 7, 0.2) !important;
+    border-bottom: 1px solid rgba(255, 193, 7, 0.2) !important;
+}
+
+.professional-card.border-dark {
+    border-left: 4px solid #343a40 !important;
+    border-top: 1px solid rgba(52, 58, 64, 0.2) !important;
+    border-right: 1px solid rgba(52, 58, 64, 0.2) !important;
+    border-bottom: 1px solid rgba(52, 58, 64, 0.2) !important;
+}
+
+/* Effet hover avec bordures colorées */
+.professional-card.border-primary:hover {
+    box-shadow: 0 8px 30px rgba(0, 123, 255, 0.15);
+    border-left-color: #0056b3 !important;
+}
+
+.professional-card.border-secondary:hover {
+    box-shadow: 0 8px 30px rgba(108, 117, 125, 0.15);
+    border-left-color: #495057 !important;
+}
+
+.professional-card.border-success:hover {
+    box-shadow: 0 8px 30px rgba(40, 167, 69, 0.15);
+    border-left-color: #1e7e34 !important;
+}
+
+.professional-card.border-info:hover {
+    box-shadow: 0 8px 30px rgba(23, 162, 184, 0.15);
+    border-left-color: #117a8b !important;
+}
+
+.professional-card.border-warning:hover {
+    box-shadow: 0 8px 30px rgba(255, 193, 7, 0.15);
+    border-left-color: #e0a800 !important;
+}
+
+.professional-card.border-dark:hover {
+    box-shadow: 0 8px 30px rgba(52, 58, 64, 0.15);
+    border-left-color: #212529 !important;
+}
+
+.professional-card.stats-card {
+    /* permettre à cette carte de s'étendre (pas de hauteur fixe) */
+    min-height: auto !important;
+    max-height: none !important;
+}
+
+/* Supprimer le scroll interne et compacter un peu l'intérieur */
+.professional-card.stats-card .card-body {
+    overflow: visible !important;
+    flex: 0 0 auto !important;
+    display: block !important;
+    padding: 0.7rem !important;
+}
+
+/* Compacter les sous-cartes de stats pour tout faire tenir */
+.professional-card.stats-card .stat-card {
+    padding: 0.5rem !important;
+    margin-bottom: 0.45rem !important;
+}
+
+.professional-card.stats-card .stat-number { font-size: 1.15rem !important; }
+.professional-card.stats-card .stat-label  { font-size: 0.75rem !important; }
+.professional-card.stats-card .stat-trend  { font-size: 0.65rem !important; }
+.professional-card.stats-card .performance-summary { padding: 0.6rem !important; }
+
+/* Ajustements responsive si nécessaire */
+@media (max-width: 1199.98px) {
+    .professional-card.stats-card { min-height: auto !important; max-height: none !important; }
+    .professional-card.stats-card .stat-number { font-size: 1.05rem !important; }
+}
+@media (max-width: 767.98px) {
+    .professional-card.stats-card .card-body { padding: 0.5rem !important; }
+    .professional-card.stats-card .stat-number { font-size: 1rem !important; }
+}
+
+.professional-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
 }
 
-.stats-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 10px;
+.professional-card .card-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    flex-shrink: 0; /* Empêche la compression du header */
+}
+
+.professional-card .card-body {
+    padding: 1.25rem;
+    flex: 1; /* Prend tout l'espace restant */
+    overflow-y: auto; /* Scroll si contenu trop long */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Headers avec gradients */
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+}
+
+.bg-gradient-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%) !important;
+}
+
+.bg-gradient-success {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+}
+
+.bg-gradient-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #117a8b 100%) !important;
+}
+
+.bg-gradient-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%) !important;
+}
+
+.bg-gradient-dark {
+    background: linear-gradient(135deg, #343a40 0%, #212529 100%) !important;
+}
+
+/* Cartes de statistiques */
+.stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid;
+    transition: all 0.2s ease;
+    height: 100%;
+}
+
+.stat-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.stat-trend {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.stat-icon {
+    width: 35px;
+    height: 35px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
+    font-size: 1rem;
 }
 
-.card {
-    border: 0;
-    border-radius: 10px;
+/* Résumé de performance */
+.performance-summary {
+    background: rgba(13, 110, 253, 0.05);
+    border-radius: 8px;
+    padding: 1rem;
+    border-left: 4px solid #007bff;
 }
 
-.shadow-sm {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+/* === TABLES PROFESSIONNELLES AVEC SCROLL === */
+.professional-table {
+    font-size: 0.875rem;
 }
 
-.list-group-item {
-    border: none;
-    border-bottom: 1px solid #eee;
-}
-
-.list-group-item:last-child {
-    border-bottom: none;
-}
-
-.table th {
+.professional-table th {
+    background-color: #f8f9fa;
     border-top: none;
     font-weight: 600;
-    font-size: 0.9rem;
+    padding: 0.75rem 0.5rem;
+    font-size: 0.8rem;
 }
 
-.btn-lg {
-    font-size: 1rem;
-    padding: 0.75rem 1rem;
+.professional-table td {
+    padding: 0.75rem 0.5rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #e9ecef;
 }
 
+.order-row:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.smaller {
+    font-size: 0.7rem;
+}
+
+/* === ZONE DE CONTENU AVEC SCROLL === */
+.scrollable-content {
+    max-height: 200px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.table-container {
+    max-height: 220px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Produits */
+.product-item {
+    transition: all 0.2s ease;
+    border-radius: 6px;
+}
+
+.product-item:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.rank-badge {
+    min-width: 35px;
+}
+
+/* Charts avec hauteur fixe */
+.chart-container {
+    height: 160px;
+    width: 100%;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.chart-card canvas {
+    max-height: 160px !important;
+    width: 100% !important;
+}
+
+/* === PRÉDICTIONS IA OPTIMISÉES === */
+.prediction-chart-container {
+    height: 120px;
+    width: 100%;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    flex-shrink: 0;
+}
+
+.prediction-details {
+    max-height: 150px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.prediction-item {
+    border-bottom: 1px solid #e9ecef !important;
+    word-wrap: break-word;
+    padding: 0.5rem 0;
+}
+
+.prediction-item:last-child {
+    border-bottom: none !important;
+}
+
+.prediction-recommendations {
+    max-height: 80px;
+    overflow-y: auto;
+    margin-top: 1rem;
+}
+
+/* === ALERTES STOCK OPTIMISÉES === */
+.stock-alerts {
+    max-height: 180px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.stock-alerts .alert-sm {
+    border-radius: 6px;
+    border: none;
+    box-shadow: 0 1px 3px rgba(220, 53, 69, 0.2);
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    padding: 0.5rem;
+}
+
+.ai-card {
+    border-left: 4px solid #28a745;
+}
+
+.ai-card .card-body {
+    overflow: hidden;
+}
+
+/* Texte tronqué pour les noms longs */
+.text-truncate {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Graphique des prédictions avec taille fixe */
+#previsionChart {
+    max-width: 100% !important;
+    max-height: 120px !important;
+}
+
+/* === STYLES SPÉCIFIQUES POUR LES COMMANDES RÉCENTES === */
+.orders-table-wrapper {
+    max-height: 220px;
+    overflow-y: auto;
+    flex: 1;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.orders-table {
+    font-size: 0.8rem;
+    margin-bottom: 0;
+}
+
+.orders-table-head th {
+    background-color: #f8f9fa;
+    border-top: none;
+    font-weight: 600;
+    padding: 0.6rem 0.4rem;
+    font-size: 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.orders-table-body td {
+    padding: 0.6rem 0.4rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.order-row-new:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.order-id {
+    font-weight: 600;
+    color: #007bff;
+}
+
+.client-info {
+    min-width: 0;
+}
+
+.client-name {
+    font-weight: 500;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.client-email {
+    font-size: 0.7rem;
+    color: #6c757d;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.total-amount {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #28a745;
+}
+
+.total-items {
+    font-size: 0.7rem;
+    color: #6c757d;
+}
+
+.status-badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.4rem;
+}
+
+.date-formatted {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Résumé des commandes en bas */
+.orders-summary {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+    text-align: center;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.summary-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-bottom: 0.2rem;
+}
+
+.summary-value {
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+/* État vide des commandes */
+.orders-empty {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+/* Card section pour organiser le contenu */
+.card-section {
+    margin-bottom: 1rem;
+}
+
+.card-section:last-child {
+    margin-bottom: 0;
+}
+
+/* Responsive pour mobile */
 @media (max-width: 768px) {
-    .stats-card .card-body {
-        padding: 1rem;
+    .professional-dashboard {
+        padding: 0.5rem;
     }
     
-    .stats-icon {
-        width: 40px;
-        height: 40px;
-        font-size: 1.2rem;
+    .header-content {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    .header-actions {
+        justify-content: center;
+    }
+    
+    .professional-card {
+        min-height: auto;
+        max-height: none;
+    }
+    
+    .orders-table {
+        font-size: 0.7rem;
+    }
+    
+    .orders-table-head th {
+        padding: 0.4rem 0.2rem;
+        font-size: 0.7rem;
+    }
+    
+    .orders-table-body td {
+        padding: 0.4rem 0.2rem;
+    }
+    
+    .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    
+    .client-name,
+    .client-email {
+        max-width: 80px;
     }
 }
 
-/* Animations au chargement */
-.stats-card {
-    opacity: 0;
-    animation: fadeInUp 0.6s ease forwards;
+/* Amélioration du responsive pour les très petits écrans */
+@media (max-width: 576px) {
+    .professional-card .card-body {
+        padding: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 0.75rem;
+    }
+    
+    .orders-table-wrapper {
+        max-height: 300px;
+    }
+    
+    .prediction-details {
+        max-height: 200px;
+    }
+    
+    .stock-alerts {
+        max-height: 250px;
+    }
 }
 
-/* ...existing code... */
-#previsionChart {
-    max-height: 260px;
-    width: 100% !important;
-    height: 260px !important;
-    margin: 0 auto;
-    display: block;
-}
-/* ...existing code... */
-
-.stats-card:nth-child(1) { animation-delay: 0.1s; }
-.stats-card:nth-child(2) { animation-delay: 0.2s; }
-.stats-card:nth-child(3) { animation-delay: 0.3s; }
-.stats-card:nth-child(4) { animation-delay: 0.4s; }
-
-@keyframes fadeInUp {
+/* Animation d'entrée pour les cartes */
+@keyframes slideInUp {
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(30px);
     }
     to {
         opacity: 1;
         transform: translateY(0);
     }
 }
+
+.professional-card {
+    animation: slideInUp 0.6s ease-out;
+    animation-fill-mode: both;
+}
+
+/* Scrollbars personnalisées pour WebKit */
+.orders-table-wrapper::-webkit-scrollbar,
+.prediction-details::-webkit-scrollbar,
+.stock-alerts::-webkit-scrollbar {
+    width: 6px;
+}
+
+.orders-table-wrapper::-webkit-scrollbar-track,
+.prediction-details::-webkit-scrollbar-track,
+.stock-alerts::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.orders-table-wrapper::-webkit-scrollbar-thumb,
+.prediction-details::-webkit-scrollbar-thumb,
+.stock-alerts::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.orders-table-wrapper::-webkit-scrollbar-thumb:hover,
+.prediction-details::-webkit-scrollbar-thumb:hover,
+.stock-alerts::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* Améliorations pour l'accessibilité */
+.professional-card:focus-within {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+.btn:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Print styles */
+@media print {
+    .professional-dashboard {
+        padding: 0;
+    }
+    
+    .btn, .dropdown {
+        display: none !important;
+    }
+    
+    .professional-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+        margin-bottom: 1rem;
+        min-height: auto;
+        max-height: none;
+    }
+    
+    .chart-card canvas {
+        max-height: 300px !important;
+    }
+    
+     .orders-table-wrapper {
+        max-height: none;
+        overflow: visible;
+    }
+}
 </style>
 
-<!-- Scripts Chart.js pour les graphiques -->
+<!-- Scripts pour les graphiques -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
-// === CONFIGURATION GLOBALE CHART.JS ===
-Chart.defaults.font.family = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-Chart.defaults.font.size = 12;
+// Configuration globale des graphiques
+Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
 Chart.defaults.color = '#6c757d';
 
-// === DONNÉES POUR LES GRAPHIQUES ===
-const salesData = {
-    labels: <?php echo json_encode(array_column($sales_data, 'label')); ?>,
-    quantity: <?php echo json_encode(array_map('intval', array_column($sales_data, 'total'))); ?>,
-    revenue: <?php echo json_encode(array_map('floatval', array_column($sales_data, 'revenue'))); ?>
-};
+// Variables globales pour les données
+const salesData = <?php echo json_encode($sales_data); ?>;
+const stockData = <?php echo json_encode($stock_data); ?>;
+const predictionsData = <?php echo json_encode($previsions_data); ?>;
 
-const stockLabels = <?php echo json_encode(array_column($stock_data, 'name')); ?>;
-const stockValues = <?php echo json_encode(array_column($stock_data, 'stock')); ?>;
+// Graphique des ventes
+let salesChart = null;
+let currentSalesView = 'quantity';
 
-const previsionLabels = <?php echo json_encode(array_column($previsions_data, 'name')); ?>;
-const previsionValues = <?php echo json_encode(array_map('intval', array_column($previsions_data, 'quantite_prevue'))); ?>;
-
-// === GRAPHIQUE DES VENTES ===
-let salesChart;
-const salesCtx = document.getElementById('salesChart').getContext('2d');
-
-function createSalesChart(type = 'quantity') {
-    if (salesChart) salesChart.destroy();
+function initSalesChart() {
+    const ctx = document.getElementById('salesChart');
+    if (!ctx) return;
     
-    const data = type === 'quantity' ? salesData.quantity : salesData.revenue;
-    const label = type === 'quantity' ? 'Produits vendus' : 'Revenus (€)';
-    const color = type === 'quantity' ? 'rgba(54, 162, 235, 0.8)' : 'rgba(40, 167, 69, 0.8)';
+    const labels = salesData.map(item => item.label || 'N/A');
+    const quantityData = salesData.map(item => parseInt(item.total) || 0);
+    const revenueData = salesData.map(item => Math.round((parseFloat(item.revenue) || 0))) ; // arrondir pour afficher
+    const maxValue = Math.max(...quantityData, ...revenueData, 1);
+    const step = Math.max(1, Math.ceil(maxValue / 5));
+    const suggestedMax = Math.ceil(maxValue * 1.15 / step) * step;
     
-    salesChart = new Chart(salesCtx, {
+    // initial dataset = quantité
+    salesChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: salesData.labels,
+            labels: labels,
             datasets: [{
-                label: label,
-                data: data,
-                borderColor: color,
-                backgroundColor: color.replace('0.8', '0.1'),
+                label: 'Quantités vendues',
+                data: quantityData,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
                 borderWidth: 3,
                 fill: true,
                 tension: 0.4,
-                pointBackgroundColor: color,
-                pointBorderColor: '#fff',
+                pointBackgroundColor: '#007bff',
+                pointBorderColor: '#ffffff',
                 pointBorderWidth: 2,
-                pointRadius: 6,
-                pointHoverRadius: 8
+                pointRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    callbacks: {
+                        title: function(items) {
+                            return items[0].label || '';
+                        },
+                        label: function(context) {
+                            const val = context.parsed.y;
+                            if (currentSalesView === 'revenue') {
+                                return context.dataset.label + ': ' + new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+                            }
+                            return context.dataset.label + ': ' + val + ' pcs';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 11 } }
+                },
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: suggestedMax,
+                    ticks: {
+                        stepSize: step,
+                        font: { size: 11 },
+                        callback: function(value) {
+                            if (currentSalesView === 'revenue') {
+                                return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
+                            }
+                            return value;
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: currentSalesView === 'revenue' ? 'Revenus (€)' : 'Quantité (pcs)',
+                        color: '#6c757d',
+                        font: { size: 12 }
+                    },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                }
+            },
+            elements: { point: { hoverRadius: 8 } }
+        }
+    });
+}
+
+function toggleSalesChart(view, btnElem) {
+    if (!salesChart) return;
+    currentSalesView = view;
+    
+    // basculer active class
+    document.querySelectorAll('.btn-group button').forEach(btn => btn.classList.remove('active'));
+    if (btnElem) btnElem.classList.add('active');
+    
+    const quantityData = salesData.map(item => parseInt(item.total) || 0);
+    const revenueData = salesData.map(item => Math.round((parseFloat(item.revenue) || 0)));
+    
+    if (view === 'quantity') {
+        salesChart.data.datasets[0].data = quantityData;
+        salesChart.data.datasets[0].label = 'Quantités vendues';
+        salesChart.data.datasets[0].borderColor = '#007bff';
+        salesChart.data.datasets[0].backgroundColor = 'rgba(0, 123, 255, 0.1)';
+    } else {
+        salesChart.data.datasets[0].data = revenueData;
+        salesChart.data.datasets[0].label = 'Revenus';
+        salesChart.data.datasets[0].borderColor = '#28a745';
+        salesChart.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.1)';
+    }
+    
+    // recalculer limites et step
+    const maxValue = Math.max(...salesChart.data.datasets[0].data, 1);
+    const step = Math.max(1, Math.ceil(maxValue / 5));
+    const suggestedMax = Math.ceil(maxValue * 1.15 / step) * step;
+    salesChart.options.scales.y.suggestedMax = suggestedMax;
+    salesChart.options.scales.y.ticks.stepSize = step;
+    salesChart.options.scales.y.title.text = view === 'revenue' ? 'Revenus (€)' : 'Quantité (pcs)';
+    
+    salesChart.update('active');
+}
+
+// Graphique des stocks
+function initStockChart() {
+    const ctx = document.getElementById('stockChart');
+    if (!ctx || !stockData || stockData.length === 0) return;
+    
+    const labels = stockData.map(item => item.name.substring(0, 10) + '...');
+    const stockValues = stockData.map(item => parseInt(item.stock) || 0);
+    const thresholds = stockData.map(item => parseInt(item.stock_alert_threshold) || 5);
+    
+    // Couleurs basées sur le statut du stock
+    const backgroundColors = stockData.map(item => {
+        if (item.status_stock === 'Rupture') return 'rgba(220, 53, 69, 0.8)';
+        if (item.status_stock === 'Critique') return 'rgba(255, 193, 7, 0.8)';
+        if (item.status_stock === 'Faible') return 'rgba(255, 152, 0, 0.8)';
+        return 'rgba(40, 167, 69, 0.8)';
+    });
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Stock actuel',
+                data: stockValues,
+                backgroundColor: backgroundColors,
+                borderColor: backgroundColors.map(color => color.replace('0.8', '1')),
+                borderWidth: 1,
+                borderRadius: 4,
+                borderSkipped: false
+            }, {
+                label: 'Seuil alerte',
+                data: thresholds,
+                type: 'line',
+                borderColor: '#dc3545',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointBackgroundColor: '#dc3545',
+                pointBorderColor: '#dc3545',
+                pointRadius: 3
             }]
         },
         options: {
@@ -651,219 +1666,343 @@ function createSalesChart(type = 'quantity') {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    callbacks: {
+                        afterLabel: function(context) {
+                            if (context.datasetIndex === 0) {
+                                const status = stockData[context.dataIndex].status_stock;
+                                return 'Statut: ' + status;
+                            }
+                            return '';
+                        }
+                    }
                 }
             },
             scales: {
                 x: {
                     grid: {
                         display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 10
+                        }
                     }
                 },
                 y: {
                     beginAtZero: true,
                     grid: {
-                        color: 'rgba(0,0,0,0.05)'
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    ticks: {
+                        font: {
+                            size: 10
+                        }
                     }
                 }
-            },
-            interaction: {
-                intersect: false,
-                mode: 'index'
             }
         }
     });
 }
 
-function toggleSalesChart(type) {
-    // Mise à jour des boutons
-    document.querySelectorAll('.btn-group .btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
+// Graphique des prédictions
+function initPredictionChart() {
+    const ctx = document.getElementById('previsionChart');
+    if (!ctx || !predictionsData || predictionsData.length === 0) return;
     
-    createSalesChart(type);
-}
-
-// === GRAPHIQUE DU STOCK ===
-new Chart(document.getElementById('stockChart'), {
-    type: 'doughnut',
-    data: {
-        labels: stockLabels,
-        datasets: [{
-            data: stockValues,
-            backgroundColor: [
-                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
-                '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF',
-                '#4BC0C0', '#FF6384'
-            ],
-            borderWidth: 0,
-            hoverBorderWidth: 3,
-            hoverBorderColor: '#fff'
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom',
-                labels: {
-                    padding: 15,
-                    usePointStyle: true,
-                    font: {
-                        size: 11
-                    }
-                }
-            }
-        }
-    }
-});
-
-// === GRAPHIQUE DES PRÉDICTIONS ===
-<?php if ($previsions_data): ?>
-new Chart(document.getElementById('previsionChart'), {
-    type: 'bar',
-    data: {
-        labels: previsionLabels,
-        datasets: [{
-            label: 'Prévision mois prochain',
-            data: previsionValues,
-            backgroundColor: 'rgba(40, 167, 69, 0.8)',
-            borderColor: 'rgba(40, 167, 69, 1)',
-            borderWidth: 1,
-            borderRadius: 4,
-            borderSkipped: false
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
-            }
+    // Limiter les labels pour éviter l'étirement
+    const labels = predictionsData.map(item => {
+        const name = item.name || 'Produit';
+        return name.length > 8 ? name.substring(0, 8) + '...' : name;
+    });
+    const predictedData = predictionsData.map(item => parseInt(item.quantite_prevue) || 0);
+    const currentStock = predictionsData.map(item => parseInt(item.stock) || 0);
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Stock actuel',
+                data: currentStock,
+                backgroundColor: 'rgba(108, 117, 125, 0.7)',
+                borderColor: 'rgba(108, 117, 125, 1)',
+                borderWidth: 1
+            }, {
+                label: 'Prédiction',
+                data: predictedData,
+                backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                borderColor: 'rgba(40, 167, 69, 1)',
+                borderWidth: 1
+            }]
         },
-        scales: {
-            x: {
-                grid: {
-                    display: false
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 10
+                        },
+                        boxWidth: 12
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    titleFont: { size: 11 },
+                    bodyFont: { size: 10 },
+                    callbacks: {
+                        afterLabel: function(context) {
+                            if (context.datasetIndex === 1) {
+                                const item = predictionsData[context.dataIndex];
+                                return 'Demande: ' + item.demand_status;
+                            }
+                            return '';
+                        }
+                    }
                 }
             },
-            y: {
-                beginAtZero: true,
-                grid: {
-                    color: 'rgba(0,0,0,0.05)'
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 9
+                        },
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    ticks: {
+                        font: {
+                            size: 9
+                        }
+                    }
+                }
+            },
+            layout: {
+                padding: {
+                    top: 5,
+                    bottom: 5
                 }
             }
         }
-    }
-});
-<?php endif; ?>
+    });
+}
 
-// === API REST - MACHINE TO MACHINE COMMUNICATION ===
-class AdminAPI {
-    constructor() {
-        this.baseURL = 'api/';
-    }
+// Fonctions utilitaires
+function exportStats() {
+    // Récupération des données principales
+    const today = new Date().toISOString().split('T')[0];
+    const stats = [
+        ['Type', 'Valeur', 'Date'],
+        ['Commandes aujourd\'hui', '<?php echo $today_stats['orders']; ?>', today],
+        ['Revenus aujourd\'hui', '<?php echo $today_stats['revenue']; ?>€', today],
+        ['Nouveaux utilisateurs', '<?php echo $today_stats['new_users']; ?>', today],
+        ['Produits vendus', '<?php echo $today_stats['products_sold']; ?>', today],
+        ['Total produits', '<?php echo $global_stats['total_products']; ?>', today],
+        ['Total utilisateurs', '<?php echo $global_stats['total_users']; ?>', today],
+        ['Stock critique', '<?php echo $global_stats['low_stock_count']; ?>', today],
+        ['Commandes en attente', '<?php echo $global_stats['pending_orders']; ?>', today]
+    ];
     
-    async getNotifications() {
-        try {
-            const response = await fetch(this.baseURL + 'notifications.php');
-            return await response.json();
-        } catch (error) {
-            console.error('❌ Erreur notifications:', error);
-            return null;
+    // Conversion en CSV
+    const csvContent = stats.map(row => row.join(',')).join('\n');
+    
+    // Téléchargement
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `dashboard_stats_${today}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Notification de succès
+    showSuccessToast('Statistiques exportées avec succès !');
+}
+
+function printDashboard() {
+    // Configuration d'impression
+    const printCSS = `
+        <style>
+            @media print {
+                .professional-dashboard { padding: 0; }
+                .btn, .dropdown { display: none !important; }
+                .professional-card { 
+                    break-inside: avoid; 
+                    box-shadow: none; 
+                    border: 1px solid #ddd;
+                    margin-bottom: 1rem;
+                }
+                .chart-card canvas { max-height: 300px !important; }
+            }
+        </style>
+    `;
+    
+    // Ajout du CSS d'impression
+    const head = document.getElementsByTagName('head')[0];
+    const style = document.createElement('style');
+    style.innerHTML = printCSS;
+    head.appendChild(style);
+    
+    // Impression
+    window.print();
+    
+    // Suppression du CSS après impression
+    setTimeout(() => {
+        head.removeChild(style);
+    }, 1000);
+}
+
+// Notifications toast
+function showSuccessToast(message) {
+    // Création du toast
+    const toast = document.createElement('div');
+    toast.className = 'toast show position-fixed top-0 end-0 m-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="toast-header bg-success text-white">
+            <i class="bi bi-check-circle me-2"></i>
+            <strong class="me-auto">Succès</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">${message}</div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Suppression automatique après 3 secondes
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
         }
-    }
-    
-    async markNotificationRead(id) {
-        try {
-            const response = await fetch(this.baseURL + 'notifications.php', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: id})
+    }, 3000);
+}
+
+// Actualisation automatique des données (toutes les 5 minutes)
+function autoRefreshData() {
+    setInterval(() => {
+        // Actualisation silencieuse des statistiques via AJAX
+        fetch(window.location.href, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.text())
+        .then(html => {
+            // Mise à jour des éléments dynamiques
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Mise à jour des badges de notifications
+            const notifBadges = document.querySelectorAll('[data-badge="notif"]');
+            const newNotifBadges = doc.querySelectorAll('[data-badge="notif"]');
+            
+            notifBadges.forEach((badge, index) => {
+                if (newNotifBadges[index]) {
+                    badge.textContent = newNotifBadges[index].textContent;
+                }
             });
-            return await response.json();
-        } catch (error) {
-            console.error('❌ Erreur mark read:', error);
-            return null;
-        }
-    }
-    
-    async getStock() {
-        try {
-            const response = await fetch(this.baseURL + 'stock.php');
-            return await response.json();
-        } catch (error) {
-            console.error('❌ Erreur stock:', error);
-            return null;
-        }
-    }
-    
-    async getOrders() {
-        try {
-            const response = await fetch(this.baseURL + 'orders.php');
-            return await response.json();
-        } catch (error) {
-            console.error('❌ Erreur orders:', error);
-            return null;
-        }
-    }
+            
+            console.log('🔄 Données actualisées automatiquement');
+        })
+        .catch(error => {
+            console.warn('⚠️ Erreur lors de l\'actualisation automatique:', error);
+        });
+    }, 300000); // 5 minutes
 }
 
-// Initialisation de l'API
-const api = new AdminAPI();
-
-// Fonction pour mettre à jour le badge de notifications
-function updateNotificationBadge(count) {
-    const badge = document.querySelector('.position-absolute.badge');
-    if (badge) {
-        if (count > 0) {
-            badge.textContent = count;
-            badge.style.display = 'inline';
-        } else {
-            badge.style.display = 'none';
+// Initialisation au chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Dashboard professionnel chargé');
+    
+    // Initialisation des graphiques
+    initSalesChart();
+    initStockChart();
+    initPredictionChart();
+    
+    // Démarrage de l'actualisation automatique
+    autoRefreshData();
+    
+    // Gestion des erreurs de graphiques
+    window.addEventListener('error', function(e) {
+        if (e.message.includes('Chart')) {
+            console.warn('⚠️ Erreur de graphique:', e.message);
         }
-    }
-}
-
-// === INITIALISATION ===
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🚀 Dashboard Admin Moderne - Machine-to-Machine Communication Active!');
+    });
     
-    // Créer le graphique des ventes initial
-    createSalesChart('quantity');
+    // Animation d'entrée pour les cartes
+    const cards = document.querySelectorAll('.professional-card');
+    cards.forEach((card, index) => {
+        card.style.animationDelay = `${index * 0.1}s`;
+    });
     
-    // Test initial des APIs
-    const notifications = await api.getNotifications();
-    if (notifications?.success) {
-        console.log('✅ API Notifications OK:', notifications.count, 'notification(s)');
-        updateNotificationBadge(notifications.count);
-    }
+    // Tooltips Bootstrap
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
     
-    const stock = await api.getStock();
-    if (stock?.success) {
-        console.log('✅ API Stock OK:', stock.low_stock_count || 0, 'produit(s) en stock faible');
-    }
-    
-    const orders = await api.getOrders();
-    if (orders?.success) {
-        console.log('✅ API Orders OK:', orders.stats?.pending_orders || 0, 'commande(s) en attente');
-    }
-    
-    // Auto-refresh des notifications toutes les 60 secondes
-    setInterval(async () => {
-        const notifications = await api.getNotifications();
-        if (notifications?.success) {
-            updateNotificationBadge(notifications.count);
-            console.log('🔄 Auto-refresh:', notifications.count, 'notification(s) non lue(s)');
-        }
-    }, 60000);
-    
-    console.log('✨ Dashboard entièrement initialisé avec succès!');
+    console.log('✅ Dashboard entièrement initialisé');
 });
-</script>
 
+// Gestion de la visibilité de la page (pour économiser les ressources)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        console.log('🔇 Dashboard mis en veille');
+        // Arrêter les animations coûteuses
+    } else {
+        console.log('🔊 Dashboard réactivé');
+        // Reprendre les animations
+    }
+});
+
+// Raccourcis clavier
+document.addEventListener('keydown', function(e) {
+    // Ctrl + R : actualisation manuelle
+    if (e.ctrlKey && e.key === 'r') {
+        e.preventDefault();
+        location.reload();
+    }
+    
+    // Ctrl + P : impression
+    if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        printDashboard();
+    }
+    
+    // Ctrl + E : export
+    if (e.ctrlKey && e.key === 'e') {
+        e.preventDefault();
+        exportStats();
+    }
+});
+
+</script>
 
 <?php include 'includes/footer.php'; ?>

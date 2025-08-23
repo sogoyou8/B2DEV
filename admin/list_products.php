@@ -6,78 +6,262 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
 }
-include '../includes/db.php';
-include 'includes/header.php';
 
-// Affichage des alertes
-if (isset($_SESSION['error'])): ?>
-    <div class="alert alert-danger text-center">
-        <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
-    </div>
-<?php endif; ?>
+include_once '../includes/db.php';
+include_once 'includes/header.php';
 
-<?php if (isset($_SESSION['success'])): ?>
-    <div class="alert alert-success text-center">
-        <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
-    </div>
-<?php endif; ?>
+// Small helper for badge class by stock level (kept simple)
+function stockBadgeClass(int $stock): string {
+    if ($stock > 10) return 'bg-success text-white';
+    if ($stock > 0) return 'bg-warning text-dark';
+    return 'bg-danger text-white';
+}
 
-<?php
-$query = $pdo->query("SELECT * FROM items");
-$products = $query->fetchAll(PDO::FETCH_ASSOC);
+// Fetch products (same logic as before, ordered by id desc)
+try {
+    $stmt = $pdo->query("SELECT * FROM items ORDER BY id DESC");
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $products = [];
+    $_SESSION['error'] = "Erreur lors de la récupération des produits : " . $e->getMessage();
+}
 ?>
-<main>
-    <section>
-        <h2>Liste des produits</h2>
-        <a href="add_product.php" class="btn btn-primary mb-3">Ajouter un produit</a>
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Nom</th>
-                    <th>Description</th>
-                    <th>Prix</th>
-                    <th>Stock</th>
-                    <th>Image</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($products as $product): ?>
-                    <?php
-                    // Récupérer la première image du produit
-                    $query = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1");
-                    $query->execute([$product['id']]);
-                    $image = $query->fetch(PDO::FETCH_ASSOC);
-                    ?>
+<script>
+try { document.body.classList.add('admin-page'); } catch(e){}
+</script>
+
+<style>
+:root{
+    --card-radius:12px;
+    --muted:#6c757d;
+    --bg-gradient-1:#f8fbff;
+    --bg-gradient-2:#eef7ff;
+    --accent:#0d6efd;
+    --accent-2:#6610f2;
+}
+body.admin-page {
+    background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
+}
+.panel-card {
+    border-radius: var(--card-radius);
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
+    box-shadow: 0 12px 36px rgba(3,37,76,0.06);
+    padding: 1.25rem;
+}
+.page-title { display:flex; gap:1rem; align-items:center; }
+.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+.btn-round { border-radius:8px; }
+.thumb { width:56px; height:56px; object-fit:cover; border-radius:8px; box-shadow:0 8px 20px rgba(3,37,76,0.04); }
+.table thead th {
+    background: linear-gradient(180deg,#fbfdff,#f2f7ff);
+    border-bottom:1px solid rgba(3,37,76,0.06);
+    font-weight:600;
+}
+.search-box { max-width:640px; width:100%; }
+.product-card { border-radius:12px; padding:12px; background:#fff; box-shadow:0 8px 24px rgba(3,37,76,0.04); }
+.small-input { max-width:120px; }
+</style>
+
+<main class="container py-4">
+    <section class="panel-card mb-4">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div class="page-title">
+                <h2 class="h4 mb-0">Liste des produits</h2>
+                <div class="small text-muted">Gestion centralisée et actions rapides pour votre catalogue</div>
+            </div>
+            <div class="controls">
+                <a href="add_product.php" class="btn btn-primary btn-sm btn-round"><i class="bi bi-plus-circle me-1"></i> Ajouter un produit</a>
+                <a href="bulk_update_products.php" class="btn btn-success btn-sm btn-round"><i class="bi bi-collection me-1"></i> Mise à jour en masse</a>
+                <a href="list_products.php" class="btn btn-outline-secondary btn-sm btn-round">Actualiser</a>
+            </div>
+        </div>
+
+        <?php if (!empty($_SESSION['error'])): ?>
+            <div class="alert alert-danger text-center shadow-sm mb-3"><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></div>
+        <?php endif; ?>
+        <?php if (!empty($_SESSION['success'])): ?>
+            <div class="alert alert-success text-center shadow-sm mb-3"><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></div>
+        <?php endif; ?>
+
+        <div class="card border-0 shadow-sm mb-3 p-3">
+            <div class="d-flex gap-3 align-items-center w-100 flex-wrap">
+                <div class="input-group search-box me-auto">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input id="searchInput" type="search" class="form-control" placeholder="Rechercher par nom, catégorie ou ID...">
+                </div>
+
+                <div>
+                    <button id="toggleView" class="btn btn-outline-primary btn-sm btn-round" title="Basculer vue tableau / vignettes">
+                        <i class="bi bi-grid-3x3-gap-fill"></i> Vignette
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE VIEW -->
+        <div id="tableViewSection" class="table-responsive rounded shadow-sm mb-3">
+            <table class="table table-hover table-striped align-middle mb-0" id="productsTable">
+                <thead class="table-light">
                     <tr>
-                        <td><?php echo $product['id']; ?></td>
-                        <td><?php echo $product['name']; ?></td>
-                        <td><?php echo $product['description']; ?></td>
-                        <td><?php echo $product['price']; ?> €</td>
-                        <td><?php echo $product['stock']; ?></td>
-                        <td>
-                            <?php if ($image): ?>
-                                <img src="../assets/images/<?php echo htmlspecialchars($image['image']); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>" width="50">
-                            <?php else: ?>
-                                <span>Aucune image</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <a href="edit_product.php?id=<?php echo $product['id']; ?>" class="btn btn-warning btn-sm">Modifier</a>
-                            <button onclick="confirmDelete(<?php echo $product['id']; ?>)" class="btn btn-danger btn-sm">Supprimer</button>
-                        </td>
+                        <th style="width:80px;">ID</th>
+                        <th>Nom</th>
+                        <th>Description</th>
+                        <th class="text-end">Prix</th>
+                        <th style="width:100px;">Stock</th>
+                        <th style="width:90px;">Image</th>
+                        <th style="width:260px;" class="text-center">Actions</th>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php if (empty($products)): ?>
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">Aucun produit trouvé.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($products as $product): ?>
+                            <?php
+                                $pid = (int)$product['id'];
+                                $pname = htmlspecialchars($product['name']);
+                                $pdesc = htmlspecialchars($product['description'] ?? '');
+                                $pprice = number_format((float)$product['price'], 2, '.', '');
+                                $pstock = intval($product['stock']);
+                                $pcategory = htmlspecialchars($product['category'] ?? '');
+                                $searchText = strtolower($pid . ' ' . $pname . ' ' . $pcategory . ' ' . $pdesc);
+
+                                // get first image (same per-product query as before)
+                                $imgStmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1");
+                                $imgStmt->execute([$pid]);
+                                $image = $imgStmt->fetch(PDO::FETCH_ASSOC);
+                                $imgFile = __DIR__ . "/../assets/images/" . ($image['image'] ?? '');
+                                $imgSrc = (!empty($image['image']) && file_exists($imgFile)) ? ('../assets/images/' . $image['image']) : '../assets/images/default.png';
+                            ?>
+                            <tr data-search="<?php echo htmlspecialchars($searchText); ?>">
+                                <td class="fw-bold text-secondary"><?php echo $pid; ?></td>
+                                <td>
+                                    <div class="fw-semibold"><?php echo $pname; ?></div>
+                                    <small class="text-muted"><?php echo $pcategory; ?></small>
+                                </td>
+                                <td><span class="text-muted small"><?php echo $pdesc ?: '—'; ?></span></td>
+                                <td class="text-end"><strong><?php echo $pprice; ?> €</strong></td>
+                                <td>
+                                    <span class="badge <?php echo stockBadgeClass($pstock); ?>"><?php echo $pstock > 0 ? $pstock : 0; ?></span>
+                                </td>
+                                <td>
+                                    <img src="<?php echo htmlspecialchars($imgSrc); ?>" alt="<?php echo $pname; ?>" class="thumb" />
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                        <a href="edit_product.php?id=<?php echo $pid; ?>" class="btn btn-sm btn-warning"><i class="bi bi-pencil-square"></i> Modifier</a>
+                                        <a href="manage_product_images.php?id=<?php echo $pid; ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-images"></i> Images</a>
+                                        <a href="sales_history.php?product_id=<?php echo $pid; ?>" class="btn btn-sm btn-info"><i class="bi bi-clock-history"></i> Historique</a>
+                                        <button type="button" onclick="confirmDelete(<?php echo $pid; ?>)" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Supprimer</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- CARD / VIGNETTE VIEW (hidden by default) -->
+        <div id="cardViewSection" hidden>
+            <div class="row g-3">
+                <?php if (!empty($products)): ?>
+                    <?php foreach ($products as $product): ?>
+                        <?php
+                            $pid = (int)$product['id'];
+                            $pname = htmlspecialchars($product['name']);
+                            $pdesc = htmlspecialchars($product['description'] ?? '');
+                            $pprice = number_format((float)$product['price'], 2, '.', '');
+                            $pstock = intval($product['stock']);
+                            $pcategory = htmlspecialchars($product['category'] ?? '');
+
+                            $imgStmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1");
+                            $imgStmt->execute([$pid]);
+                            $image = $imgStmt->fetch(PDO::FETCH_ASSOC);
+                            $imgFile = __DIR__ . "/../assets/images/" . ($image['image'] ?? '');
+                            $imgSrc = (!empty($image['image']) && file_exists($imgFile)) ? ('../assets/images/' . $image['image']) : '../assets/images/default.png';
+
+                            $searchText = strtolower($pid . ' ' . $pname . ' ' . $pcategory . ' ' . $pdesc);
+                        ?>
+                        <div class="col-12 col-md-6 col-lg-4" data-role="product-card" data-search="<?php echo htmlspecialchars($searchText); ?>">
+                            <div class="product-card h-100 d-flex flex-column">
+                                <div style="flex:0 0 auto;">
+                                    <img src="<?php echo htmlspecialchars($imgSrc); ?>" alt="<?php echo $pname; ?>" style="width:100%; height:180px; object-fit:cover; border-radius:8px;">
+                                </div>
+                                <div style="flex:1; padding-top:.75rem;">
+                                    <h5 class="mb-1"><?php echo $pname; ?></h5>
+                                    <small class="text-muted"><?php echo $pdesc ?: 'Aucune description'; ?></small>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <div>
+                                        <div class="fw-bold"><?php echo $pprice; ?> €</div>
+                                        <small class="text-muted"><?php echo $pcategory; ?></small>
+                                    </div>
+                                    <div class="text-end">
+                                        <div><span class="badge <?php echo stockBadgeClass($pstock); ?>"><?php echo $pstock > 0 ? $pstock : 'Rupture'; ?></span></div>
+                                    </div>
+                                </div>
+                                <div class="mt-3 d-flex gap-2">
+                                    <a href="edit_product.php?id=<?php echo $pid; ?>" class="btn btn-sm btn-warning w-100">Modifier</a>
+                                    <button type="button" onclick="confirmDelete(<?php echo $pid; ?>)" class="btn btn-sm btn-danger w-100">Supprimer</button>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="text-muted">Aucun produit à afficher.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+
     </section>
 </main>
+
 <script>
-    function confirmDelete(productId) {
-        if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.')) {
-            window.location.href = 'delete_product.php?id=' + productId;
-        }
+(function(){
+    var input = document.getElementById('searchInput');
+    var tableRows = Array.from(document.querySelectorAll('#productsTable tbody tr[data-search]'));
+    var cards = Array.from(document.querySelectorAll('[data-role="product-card"]'));
+    if (input) {
+        input.addEventListener('input', function() {
+            var q = this.value.trim().toLowerCase();
+            tableRows.forEach(function(r){
+                var txt = r.getAttribute('data-search') || '';
+                r.style.display = (txt.indexOf(q) !== -1) ? '' : 'none';
+            });
+            cards.forEach(function(c){
+                var txt = c.getAttribute('data-search') || '';
+                c.style.display = (txt.indexOf(q) !== -1) ? '' : 'none';
+            });
+        });
     }
+
+    const toggleBtn = document.getElementById('toggleView');
+    const tableSection = document.getElementById('tableViewSection');
+    const cardSection = document.getElementById('cardViewSection');
+    if (toggleBtn && tableSection && cardSection) {
+        toggleBtn.addEventListener('click', function() {
+            const showingCards = !cardSection.hidden;
+            if (showingCards) {
+                cardSection.hidden = true;
+                tableSection.hidden = false;
+                this.innerHTML = '<i class="bi bi-grid-3x3-gap-fill"></i> Vignette';
+            } else {
+                cardSection.hidden = false;
+                tableSection.hidden = true;
+                this.innerHTML = '<i class="bi bi-list-ul"></i> Tableau';
+            }
+        });
+    }
+})();
+
+function confirmDelete(productId) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.')) return;
+    window.location.href = 'delete_product.php?id=' + encodeURIComponent(productId);
+}
 </script>
+
 <?php include 'includes/footer.php'; ?>
