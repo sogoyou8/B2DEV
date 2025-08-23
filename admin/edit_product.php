@@ -2,6 +2,7 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+ob_start();
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
@@ -200,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
             padding: 1.25rem;
         }
         .page-title { display:flex; gap:1rem; align-items:center; }
-        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
         .help-note { color:var(--muted); font-size:.95rem; }
         .btn-round { border-radius:8px; }
         .preview-main { border-radius:10px; background:#fff; padding:1rem; box-shadow:0 6px 18px rgba(3,37,76,0.03); min-height:320px; display:flex; align-items:center; justify-content:center; }
@@ -363,5 +364,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
 </script>
 
 <?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>
 </body>
 </html>

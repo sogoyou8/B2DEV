@@ -1,6 +1,6 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) session_start();
-
+ob_start();
 // Auth admin
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
@@ -118,7 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Insert order details and decrement stock
             $detailStmt = $pdo->prepare("INSERT INTO order_details (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)");
             $updateStockStmt = $pdo->prepare("UPDATE items SET stock = stock - ? WHERE id = ?");
-            $notifStmt = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, 1)");
+            // Use three placeholders for notifications
+            $notifStmt = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, ?)");
 
             foreach ($lines as $l) {
                 $pid = $l['product_id'];
@@ -142,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Notification non-persistante d'action admin
             try {
-                $log = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, 0)");
+                $log = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, ?)");
                 $adminName = $_SESSION['admin_name'] ?? ($_SESSION['admin_id'] ?? 'admin');
                 $log->execute(['admin_action', "Nouvelle commande #{$order_id} créée par {$adminName}", 0]);
             } catch (Exception $e) {
@@ -225,6 +226,7 @@ if (!empty($_SESSION['old_order'])) {
         color:var(--accent-2);
         background: linear-gradient(90deg, var(--accent), var(--accent-2));
         -webkit-background-clip: text;
+        background-clip: text;
         -webkit-text-fill-color: transparent;
     }
 
@@ -548,5 +550,5 @@ if (!empty($_SESSION['old_order'])) {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
 <?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>
 </body>
-</html>

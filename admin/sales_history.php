@@ -1,5 +1,6 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) session_start();
+ob_start();
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
@@ -139,7 +140,7 @@ if ($export && strtolower($export) === 'csv') {
 body.admin-page { background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2)); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 .panel-card { border-radius: var(--card-radius); background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff); box-shadow: 0 12px 36px rgba(3,37,76,0.06); padding: 1.25rem; }
 .page-title { display:flex; gap:1rem; align-items:center; }
-.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
 .small-muted { color:var(--muted); font-size:.95rem; }
 .table thead th { background: linear-gradient(180deg,#fbfdff,#f2f7ff); border-bottom:1px solid rgba(3,37,76,0.06); font-weight:600; }
 .badge-status { border-radius:8px; padding:.35em .6em; font-size:.9rem; }
@@ -304,4 +305,5 @@ body.admin-page { background: linear-gradient(180deg, var(--bg-gradient-1), var(
 })();
 </script>
 
-<?php include 'includes/footer.php';
+<?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>

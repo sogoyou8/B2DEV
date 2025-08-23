@@ -2,6 +2,7 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+ob_start();
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
     exit;
@@ -49,7 +50,7 @@ body.admin-page {
     padding: 1.25rem;
 }
 .page-title { display:flex; gap:1rem; align-items:center; }
-.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
 .controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
 .btn-round { border-radius:8px; }
 .thumb { width:56px; height:56px; object-fit:cover; border-radius:8px; box-shadow:0 8px 20px rgba(3,37,76,0.04); }
@@ -265,3 +266,4 @@ function confirmDelete(productId) {
 </script>
 
 <?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>

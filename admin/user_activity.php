@@ -1,6 +1,6 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) session_start();
-
+ob_start();
 // Simple admin guard
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
@@ -162,7 +162,7 @@ function resolveImageSrcAdmin(string $imageName = ''): string {
         body.admin-page { background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2)); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
         .panel-card { border-radius: var(--card-radius); background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff); box-shadow: 0 12px 36px rgba(3,37,76,0.06); padding: 1.25rem; }
         .page-title { display:flex; gap:1rem; align-items:center; }
-        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
         .controls { display:flex; gap:.5rem; align-items:center; }
         .btn-round { border-radius:8px; }
         .small-muted { color:var(--muted); font-size:.95rem; }
@@ -362,4 +362,5 @@ function resolveImageSrcAdmin(string $imageName = ''): string {
 </script>
 
 <?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>
 </body>

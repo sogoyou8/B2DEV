@@ -1,5 +1,6 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) session_start();
+ob_start();
 
 // Vérification accès admin
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
@@ -136,6 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color:var(--accent-2);
             background: linear-gradient(90deg, var(--accent), var(--accent-2));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         .help-note { color:var(--muted); font-size:.95rem; }
@@ -275,4 +277,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </script>
 
 <?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>
 </html>

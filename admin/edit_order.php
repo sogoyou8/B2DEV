@@ -1,5 +1,6 @@
 <?php
 if (session_status() == PHP_SESSION_NONE) session_start();
+ob_start();
 
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header("Location: admin_login.php");
@@ -167,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 1.25rem;
         }
         .page-title { display:flex; gap:1rem; align-items:center; }
-        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
         .small-muted { color:#6c757d; font-size:0.9rem; }
         .thumb { width:64px; height:64px; object-fit:cover; border-radius:8px; }
         .order-table td .item-info { display:flex; gap:12px; align-items:center; }
@@ -318,5 +319,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </script>
 
 <?php include 'includes/footer.php'; ?>
+<?php ob_end_flush(); ?>
 </body>
 </html>
