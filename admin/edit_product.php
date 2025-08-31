@@ -10,6 +10,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 
 include 'admin_demo_guard.php';
 include '../includes/db.php';
+require_once '../includes/classes/Product.php';
 include 'includes/header.php';
 
 // Récupérer l'ID du produit
@@ -105,6 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
     $stock = isset($_POST['stock']) ? $_POST['stock'] : '';
     $category = isset($_POST['category']) ? trim((string)$_POST['category']) : null;
     $stock_alert_threshold = isset($_POST['stock_alert_threshold']) && $_POST['stock_alert_threshold'] !== '' ? intval($_POST['stock_alert_threshold']) : null;
+    // Nouveau : gestion du statut actif depuis le formulaire
+    $is_active = isset($_POST['is_active']) ? 1 : 0;
 
     $errors = [];
 
@@ -127,37 +130,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
 
     if (empty($errors)) {
         try {
-            $stmt = $pdo->prepare("UPDATE items SET name = ?, description = ?, price = ?, stock = ?, category = ?, stock_alert_threshold = ?, updated_at = NOW() WHERE id = ?");
+            // On effectue une transaction pour garantir l'atomicité entre la mise à jour des métadonnées et du stock via la couche Product
+            $pdo->beginTransaction();
+
+            // Préparer deleted_at en fonction de is_active
+            $deleted_at = $is_active ? null : date('Y-m-d H:i:s');
+
+            // Mettre à jour les champs autres que le stock via UPDATE classique
+            $stmt = $pdo->prepare("UPDATE items SET name = ?, description = ?, price = ?, category = ?, stock_alert_threshold = ?, is_active = ?, deleted_at = ?, updated_at = NOW() WHERE id = ?");
             $ok = $stmt->execute([
                 $name,
                 $description,
                 round(floatval($price), 2),
-                intval($stock),
                 $category === '' ? null : $category,
                 $stock_alert_threshold === null ? intval($product['stock_alert_threshold'] ?? 0) : intval($stock_alert_threshold),
+                $is_active,
+                $deleted_at,
                 $id
             ]);
 
             if ($ok) {
-                // Log notification non-persistante pour journalisation
-                try {
-                    $stmtN = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, 0)");
-                    $adminName = $_SESSION['admin_name'] ?? ($_SESSION['admin_id'] ?? 'admin');
-                    $stmtN->execute([
-                        'admin_action',
-                        "Produit '" . addslashes($name) . "' modifié par {$adminName}"
-                    ]);
-                } catch (Exception $e) {
-                    // ignore logging failure
-                }
+                // Mettre à jour le stock via la couche Product pour centraliser notifications et logs
+                $productWrapper = new Product($pdo, $id);
+                $adminId = $_SESSION['admin_id'] ?? null;
+                $stockOk = $productWrapper->updateStock(intval($stock), $adminId);
+                if (!$stockOk) {
+                    // rollback and surface error
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    $errors[] = "Erreur lors de la mise à jour du stock via la couche produit.";
+                } else {
+                    // Si désactivation manuelle via le formulaire, nettoyer paniers/favoris pour éviter nouvel achat
+                    if (!$is_active) {
+                        try {
+                            $pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$id]);
+                            $pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$id]);
+                        } catch (Exception $_) {
+                            // ignore cleanup errors
+                        }
+                    }
 
-                $_SESSION['success'] = "Produit modifié avec succès.";
-                header("Location: list_products.php");
-                exit;
+                    // Log notification non-persistante pour journalisation
+                    try {
+                        $stmtN = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, 0)");
+                        $adminName = $_SESSION['admin_name'] ?? ($_SESSION['admin_id'] ?? 'admin');
+                        $stmtN->execute([
+                            'admin_action',
+                            "Produit '" . addslashes($name) . "' modifié par {$adminName}"
+                        ]);
+                    } catch (Exception $e) {
+                        // ignore logging failure
+                    }
+
+                    $pdo->commit();
+                    $_SESSION['success'] = "Produit modifié avec succès.";
+                    header("Location: list_products.php");
+                    exit;
+                }
             } else {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 $errors[] = "Erreur lors de la mise à jour du produit.";
             }
         } catch (Exception $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $errors[] = "Erreur base de données : " . $e->getMessage();
         }
     }
@@ -172,6 +206,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
         } catch (Exception $e) {
             // ignore
         }
+        // reload images in case they were needed
+        try {
+            $imgStmt = $pdo->prepare("SELECT id, image, caption, position FROM product_images WHERE product_id = ? ORDER BY position ASC");
+            $imgStmt->execute([$id]);
+            $product_images = $imgStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $_) {
+            // ignore
+        }
     }
 }
 ?>
@@ -182,34 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Admin - Modifier un produit</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
-    <style>
-        :root{
-            --card-radius:12px;
-            --muted:#6c757d;
-            --bg-gradient-1:#f8fbff;
-            --bg-gradient-2:#eef7ff;
-            --accent:#0d6efd;
-            --accent-2:#6610f2;
-        }
-        body.admin-page {
-            background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
-        }
-        .panel-card {
-            border-radius: var(--card-radius);
-            background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
-            box-shadow: 0 12px 36px rgba(3,37,76,0.06);
-            padding: 1.25rem;
-        }
-        .page-title { display:flex; gap:1rem; align-items:center; }
-        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
-        .help-note { color:var(--muted); font-size:.95rem; }
-        .btn-round { border-radius:8px; }
-        .preview-main { border-radius:10px; background:#fff; padding:1rem; box-shadow:0 6px 18px rgba(3,37,76,0.03); min-height:320px; display:flex; align-items:center; justify-content:center; }
-        .preview-main img { max-width:100%; max-height:420px; object-fit:cover; border-radius:8px; }
-        .preview-thumbs { display:flex; gap:12px; margin-top:.75rem; flex-wrap:wrap; }
-        .preview-thumb { width:84px; height:84px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid rgba(0,0,0,0.04); box-shadow:0 8px 20px rgba(3,37,76,0.06); }
-        .existing-images img { width:110px; height:80px; object-fit:cover; border-radius:8px; }
-    </style>
+    <link rel="stylesheet" href="../assets/css/admin/edit_product.css">
 </head>
 <body class="admin-page">
 <main class="container py-4">
@@ -307,6 +322,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
                             <label for="stock_alert_threshold" class="form-label">Seuil alerte :</label>
                             <input type="number" name="stock_alert_threshold" id="stock_alert_threshold" class="form-control" min="0" value="<?php echo htmlspecialchars((int)($product['stock_alert_threshold'] ?? 0)); ?>">
                         </div>
+                    </div>
+
+                    <div class="form-check form-switch mt-3">
+                        <?php $current_active = isset($product['is_active']) ? (int)$product['is_active'] : 1; ?>
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" <?php echo $current_active ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="is_active">Actif (visible et achetable)</label>
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center mt-4">

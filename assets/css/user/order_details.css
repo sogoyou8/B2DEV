@@ -1,0 +1,715 @@
+/* Reprise exacte du design de orders_invoices.css avec adaptations pour order_details */
+:root {
+    --primary-color: #3b82f6;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    --radius: 12px;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* Section principale (identique à orders_invoices) */
+.orders-invoices-section {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+/* Header de page (identique à orders_invoices) */
+.page-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.page-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.page-subtitle {
+    font-size: 1.125rem;
+    color: var(--gray-600);
+    margin: 0;
+}
+
+/* Layout des cartes (identique à orders_invoices) */
+.orders-cards-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* Carte de commande (identique à orders_invoices) */
+.order-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.order-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+/* Header de commande (identique à orders_invoices) */
+.order-header {
+    background: linear-gradient(135deg, var(--gray-50), white);
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.order-info-main {
+    flex: 1;
+}
+
+.order-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin: 0 0 0.5rem 0;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.order-title:hover {
+    color: var(--primary-color);
+}
+
+.order-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.order-date {
+    color: var(--gray-600);
+    font-size: 0.875rem;
+}
+
+.order-amount {
+    text-align: right;
+}
+
+.amount-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    line-height: 1;
+}
+
+.amount-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.25rem;
+}
+
+/* Badges de statut (identique à orders_invoices) */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.badge-success {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.badge-warning {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.badge-danger {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.badge-info {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.badge-secondary {
+    background-color: var(--gray-100);
+    color: var(--gray-700);
+}
+
+/* Contenu principal (identique à orders_invoices) */
+.order-content {
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+}
+
+@media (min-width: 768px) {
+    .order-content {
+        grid-template-columns: 2fr 1fr;
+    }
+}
+
+/* Sections (identique à orders_invoices) */
+.order-section {
+    background: var(--gray-50);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-800);
+    margin: 0 0 1rem 0;
+}
+
+.section-title i {
+    color: var(--primary-color);
+}
+
+/* Showcase produits détaillé (adaptation pour order_details) */
+.products-detailed-showcase {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.product-detailed-card {
+    background: white;
+    border-radius: 10px;
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+    transition: all 0.2s;
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 0;
+}
+
+@media (max-width: 768px) {
+    .product-detailed-card {
+        grid-template-columns: 1fr;
+    }
+}
+
+.product-detailed-card:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+
+/* Container d'image avec galerie */
+.product-image-container {
+    position: relative;
+    background: var(--gray-50);
+}
+
+.product-image-gallery {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    overflow: hidden;
+}
+
+.gallery-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.gallery-image.active {
+    opacity: 1;
+}
+
+.product-detail-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.product-detail-image.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gray-100);
+    color: var(--gray-400);
+    font-size: 2rem;
+}
+
+/* Navigation de galerie */
+.gallery-navigation {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.5rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.product-image-container:hover .gallery-navigation {
+    opacity: 1;
+}
+
+.gallery-nav {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
+}
+
+.gallery-nav:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+/* Dots de galerie */
+.gallery-dots {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.25rem;
+}
+
+.gallery-dot {
+    width: 6px;
+    height: 6px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.gallery-dot.active,
+.gallery-dot:hover {
+    background: white;
+    transform: scale(1.3);
+}
+
+/* Badge quantité (identique à orders_invoices) */
+.quantity-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: var(--primary-color);
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    min-width: 1.25rem;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+/* Info produit détaillée */
+.product-detail-info {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.product-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--gray-800);
+    margin: 0;
+    line-height: 1.3;
+}
+
+.product-description {
+    color: var(--gray-600);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+/* Détails de prix */
+.product-pricing-details {
+    background: var(--gray-50);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: auto;
+}
+
+.pricing-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    color: var(--gray-600);
+}
+
+.pricing-row.total-row {
+    border-top: 1px solid var(--gray-200);
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+.pricing-label {
+    font-size: 0.875rem;
+}
+
+.pricing-value {
+    font-weight: 500;
+}
+
+.total-value {
+    color: var(--success-color);
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+/* Actions produit */
+.product-actions {
+    margin-top: 0.5rem;
+}
+
+.no-products {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--gray-500);
+    font-style: italic;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.no-products i {
+    font-size: 2.5rem;
+    color: var(--gray-400);
+}
+
+/* Section facture (identique à orders_invoices) */
+.invoice-details {
+    space-y: 0.75rem;
+}
+
+.invoice-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.invoice-row:last-child {
+    border-bottom: none;
+}
+
+.invoice-row .label {
+    font-weight: 500;
+    color: var(--gray-700);
+    flex-shrink: 0;
+    margin-right: 1rem;
+}
+
+.invoice-row .value {
+    color: var(--gray-900);
+    text-align: right;
+    flex: 1;
+}
+
+.invoice-row .value.amount {
+    font-weight: 600;
+    color: var(--success-color);
+}
+
+.invoice-row .value.address {
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.no-invoice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--gray-500);
+    font-style: italic;
+    justify-content: center;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px dashed var(--gray-300);
+}
+
+/* --- NEW: styles pour la liste des commandes liées à la même facture --- */
+.related-orders {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed rgba(0,0,0,0.06);
+}
+.related-title {
+    font-size: 0.95rem;
+    color: var(--gray-700);
+    margin: 0 0 0.6rem 0;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+.related-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.related-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border-radius: 8px;
+    padding: 0.6rem;
+    border: 1px solid var(--gray-200);
+}
+.related-left { display:flex; flex-direction:column; gap:0.15rem; }
+.related-order-id { font-weight:600; color:var(--gray-800); }
+.related-meta { font-size:0.85rem; color:var(--gray-600); display:flex; gap:.5rem; align-items:center; }
+.related-right { display:flex; align-items:center; gap:0.75rem; min-width:160px; justify-content:flex-end; }
+.related-amount { font-weight:700; color:var(--gray-900); }
+.related-actions .btn { padding: .35rem .6rem; font-size: .8rem; }
+
+/* Actions (identique à orders_invoices) */
+.order-actions {
+    padding: 1rem 1.5rem;
+    background: var(--gray-50);
+    border-top: 1px solid var(--gray-200);
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+    text-decoration: none;
+    color: white;
+}
+
+.btn-outline-secondary {
+    background: transparent;
+    color: var(--gray-700);
+    border-color: var(--gray-300);
+}
+
+.btn-outline-secondary:hover {
+    background: var(--gray-50);
+    border-color: var(--gray-400);
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: var(--gray-700);
+}
+
+/* État vide (identique à orders_invoices) */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-200);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    color: var(--gray-300);
+    margin-bottom: 1.5rem;
+}
+
+.empty-state h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    color: var(--gray-600);
+    margin-bottom: 2rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .orders-invoices-section {
+        padding: 1rem 0.5rem;
+    }
+
+    .page-title {
+        font-size: 2rem;
+    }
+
+    .order-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+
+    .order-amount {
+        text-align: left;
+    }
+
+    .order-content {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 1rem;
+    }
+
+    .product-detailed-card {
+        grid-template-columns: 1fr;
+    }
+
+    .product-image-gallery {
+        height: 180px;
+    }
+
+    .invoice-row {
+        flex-direction: column;
+        gap: 0.25rem;
+        align-items: flex-start;
+    }
+
+    .invoice-row .value {
+        text-align: left;
+    }
+
+    .related-item { flex-direction: column; align-items: flex-start; gap:.5rem; }
+    .related-right { min-width: unset; justify-content:flex-start; }
+
+    .order-actions {
+        flex-direction: column;
+    }
+}
+
+/* Animations (identique à orders_invoices) */
+@media (prefers-reduced-motion: no-preference) {
+    .order-card {
+        opacity: 0;
+        transform: translateY(20px);
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    @keyframes fadeInUp {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Mode sombre (identique à orders_invoices) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --gray-50: #1f2937;
+        --gray-100: #374151;
+        --gray-200: #4b5563;
+        --gray-900: #f9fafb;
+        --gray-800: #f3f4f6;
+        --gray-700: #e5e7eb;
+        --gray-600: #d1d5db;
+    }
+}
+
+/* Focus accessibilité (identique à orders_invoices) */
+.btn:focus,
+.order-title:focus,
+.gallery-nav:focus,
+.gallery-dot:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Optimisations performance */
+@media (prefers-reduced-motion: reduce) {
+    .order-card,
+    .gallery-image,
+    .btn {
+        transition: none;
+        animation: none;
+    }
+}

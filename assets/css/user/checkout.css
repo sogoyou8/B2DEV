@@ -1,0 +1,26 @@
+/* Visual improvements for checkout */
+.checkout-wrapper { max-width: 1200px; margin: 28px auto; display: grid; grid-template-columns: 1fr 360px; gap: 28px; align-items:start; padding: 0 16px; }
+.checkout-panel, .summary-panel { background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 8px 22px rgba(15,23,42,0.05); }
+.checkout-panel h2 { margin-top: 0; font-size: 1.8rem; }
+.alert-server { background: #fdecea; color:#7c1d1d; border-left:4px solid #f8c4c0; padding: 14px; border-radius:8px; }
+.field-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; align-items:center; }
+.field-row { margin-bottom: 12px; }
+.field-row label { display:block; font-weight:600; margin-bottom:6px; color:#1f2937; }
+.field-row input[type="text"], .field-row input[type="email"], .field-row input[type="number"] {
+    width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:0.95rem;
+    box-sizing:border-box;
+}
+.form-check { margin-top:8px; display:flex; align-items:center; gap:8px; }
+.form-actions { display:flex; gap:12px; margin-top:16px; flex-wrap:wrap; }
+.btn { display:inline-block; padding:10px 18px; border-radius:8px; cursor:pointer; font-weight:600; border:1px solid transparent; }
+.btn-primary { background:#2563eb; color:#fff; }
+.btn-ghost { background:transparent; color:#2563eb; border:1px solid #cfe0ff; }
+.btn-danger { background:#ef4444; color:#fff; }
+.summary-panel h3 { margin-top:0; font-size:1.1rem; }
+.summary-line { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #eef2f7; }
+.small-muted { color:#6b7280; font-size:0.9rem; }
+.badge-default { display:inline-block; background:#10b981; color:#fff; padding:4px 8px; border-radius:999px; font-size:0.85rem; margin-left:8px; }
+@media (max-width: 900px) {
+    .checkout-wrapper { grid-template-columns: 1fr; }
+    .summary-panel { order: 2; }
+}

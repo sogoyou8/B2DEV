@@ -9,7 +9,43 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 
 include_once '../includes/db.php';
-include_once 'includes/header.php';
+include_once 'admin_demo_guard.php';
+
+// --- Actions (reactiver / désactiver) traitées AVANT l'inclusion du header pour permettre les redirections ---
+if (isset($_GET['action']) && isset($_GET['id'])) {
+    $action = $_GET['action'];
+    $id = (int)$_GET['id'];
+
+    // protection mode démo
+    if (!function_exists('guardDemoAdmin') || !guardDemoAdmin()) {
+        $_SESSION['error'] = "Action désactivée en mode démo.";
+        header("Location: list_products.php");
+        exit;
+    }
+
+    try {
+        if ($action === 'reactivate') {
+            $stmt = $pdo->prepare("UPDATE items SET is_active = 1, deleted_at = NULL WHERE id = ?");
+            $stmt->execute([$id]);
+            $_SESSION['success'] = "Produit réactivé avec succès.";
+        } elseif ($action === 'deactivate') {
+            $stmt = $pdo->prepare("UPDATE items SET is_active = 0, deleted_at = NOW() WHERE id = ?");
+            $stmt->execute([$id]);
+            // nettoyer le panier pour éviter nouvel achat depuis le front
+            try {
+                $pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$id]);
+            } catch (Exception $_) { /* ignore */ }
+            $_SESSION['success'] = "Produit désactivé avec succès.";
+        } else {
+            // action inconnue -> ignorer
+        }
+    } catch (Exception $e) {
+        $_SESSION['error'] = "Erreur lors de l'action sur le produit : " . $e->getMessage();
+    }
+
+    header("Location: list_products.php");
+    exit;
+}
 
 // Small helper for badge class by stock level (kept simple)
 function stockBadgeClass(int $stock): string {
@@ -26,49 +62,20 @@ try {
     $products = [];
     $_SESSION['error'] = "Erreur lors de la récupération des produits : " . $e->getMessage();
 }
+
+include_once 'includes/header.php';
 ?>
 <script>
 try { document.body.classList.add('admin-page'); } catch(e){}
 </script>
 
-<style>
-:root{
-    --card-radius:12px;
-    --muted:#6c757d;
-    --bg-gradient-1:#f8fbff;
-    --bg-gradient-2:#eef7ff;
-    --accent:#0d6efd;
-    --accent-2:#6610f2;
-}
-body.admin-page {
-    background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
-}
-.panel-card {
-    border-radius: var(--card-radius);
-    background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
-    box-shadow: 0 12px 36px rgba(3,37,76,0.06);
-    padding: 1.25rem;
-}
-.page-title { display:flex; gap:1rem; align-items:center; }
-.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
-.controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-.btn-round { border-radius:8px; }
-.thumb { width:56px; height:56px; object-fit:cover; border-radius:8px; box-shadow:0 8px 20px rgba(3,37,76,0.04); }
-.table thead th {
-    background: linear-gradient(180deg,#fbfdff,#f2f7ff);
-    border-bottom:1px solid rgba(3,37,76,0.06);
-    font-weight:600;
-}
-.search-box { max-width:640px; width:100%; }
-.product-card { border-radius:12px; padding:12px; background:#fff; box-shadow:0 8px 24px rgba(3,37,76,0.04); }
-.small-input { max-width:120px; }
-</style>
+<link rel="stylesheet" href="../assets/css/admin/list_products.css">
 
 <main class="container py-4">
     <section class="panel-card mb-4">
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div class="page-title">
-                <h2 class="h4 mb-0">Liste des produits</h2>
+                <h2 class="h4 mb-0">Gestion des produits</h2>
                 <div class="small text-muted">Gestion centralisée et actions rapides pour votre catalogue</div>
             </div>
             <div class="controls">
@@ -111,13 +118,14 @@ body.admin-page {
                         <th class="text-end">Prix</th>
                         <th style="width:100px;">Stock</th>
                         <th style="width:90px;">Image</th>
-                        <th style="width:260px;" class="text-center">Actions</th>
+                        <th style="width:110px;">Statut</th>
+                        <th style="width:320px;" class="text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($products)): ?>
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">Aucun produit trouvé.</td>
+                            <td colspan="8" class="text-center py-4 text-muted">Aucun produit trouvé.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($products as $product): ?>
@@ -128,6 +136,9 @@ body.admin-page {
                                 $pprice = number_format((float)$product['price'], 2, '.', '');
                                 $pstock = intval($product['stock']);
                                 $pcategory = htmlspecialchars($product['category'] ?? '');
+                                $is_active = isset($product['is_active']) ? (int)$product['is_active'] : 1;
+                                $deleted_at = $product['deleted_at'] ?? null;
+
                                 $searchText = strtolower($pid . ' ' . $pname . ' ' . $pcategory . ' ' . $pdesc);
 
                                 // get first image (same per-product query as before)
@@ -151,12 +162,29 @@ body.admin-page {
                                 <td>
                                     <img src="<?php echo htmlspecialchars($imgSrc); ?>" alt="<?php echo $pname; ?>" class="thumb" />
                                 </td>
+                                <td>
+                                    <?php if ($is_active): ?>
+                                        <span class="badge bg-success">Actif</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary">Désactivé</span>
+                                        <?php if ($deleted_at): ?>
+                                            <div class="small text-muted mt-1">supprimé le <?php echo htmlspecialchars($deleted_at); ?></div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-center">
                                     <div class="d-flex justify-content-center gap-2 flex-wrap">
                                         <a href="edit_product.php?id=<?php echo $pid; ?>" class="btn btn-sm btn-warning"><i class="bi bi-pencil-square"></i> Modifier</a>
                                         <a href="manage_product_images.php?id=<?php echo $pid; ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-images"></i> Images</a>
                                         <a href="sales_history.php?product_id=<?php echo $pid; ?>" class="btn btn-sm btn-info"><i class="bi bi-clock-history"></i> Historique</a>
-                                        <button type="button" onclick="confirmDelete(<?php echo $pid; ?>)" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Supprimer</button>
+
+                                        <?php if ($is_active): ?>
+                                            <button type="button" onclick="confirmDeactivate(<?php echo $pid; ?>)" class="btn btn-sm btn-secondary"><i class="bi bi-eye-slash"></i> Désactiver</button>
+                                            <button type="button" onclick="confirmDelete(<?php echo $pid; ?>)" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Supprimer</button>
+                                        <?php else: ?>
+                                            <button type="button" onclick="confirmReactivate(<?php echo $pid; ?>)" class="btn btn-sm btn-success"><i class="bi bi-arrow-counterclockwise"></i> Réactiver</button>
+                                            <button type="button" onclick="confirmDelete(<?php echo $pid; ?>)" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i> Supprimer</button>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -178,6 +206,7 @@ body.admin-page {
                             $pprice = number_format((float)$product['price'], 2, '.', '');
                             $pstock = intval($product['stock']);
                             $pcategory = htmlspecialchars($product['category'] ?? '');
+                            $is_active = isset($product['is_active']) ? (int)$product['is_active'] : 1;
 
                             $imgStmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1");
                             $imgStmt->execute([$pid]);
@@ -188,9 +217,9 @@ body.admin-page {
                             $searchText = strtolower($pid . ' ' . $pname . ' ' . $pcategory . ' ' . $pdesc);
                         ?>
                         <div class="col-12 col-md-6 col-lg-4" data-role="product-card" data-search="<?php echo htmlspecialchars($searchText); ?>">
-                            <div class="product-card h-100 d-flex flex-column">
+                            <div class="product-card h-100 d-flex flex-column" aria-disabled="<?php echo $is_active ? 'false' : 'true'; ?>">
                                 <div style="flex:0 0 auto;">
-                                    <img src="<?php echo htmlspecialchars($imgSrc); ?>" alt="<?php echo $pname; ?>" style="width:100%; height:180px; object-fit:cover; border-radius:8px;">
+                                    <img src="<?php echo htmlspecialchars($imgSrc); ?>" alt="<?php echo $pname; ?>" style="width:100%; height:180px; object-fit:cover; border-radius:8px; opacity: <?php echo $is_active ? '1' : '0.6'; ?>;">
                                 </div>
                                 <div style="flex:1; padding-top:.75rem;">
                                     <h5 class="mb-1"><?php echo $pname; ?></h5>
@@ -207,7 +236,11 @@ body.admin-page {
                                 </div>
                                 <div class="mt-3 d-flex gap-2">
                                     <a href="edit_product.php?id=<?php echo $pid; ?>" class="btn btn-sm btn-warning w-100">Modifier</a>
-                                    <button type="button" onclick="confirmDelete(<?php echo $pid; ?>)" class="btn btn-sm btn-danger w-100">Supprimer</button>
+                                    <?php if ($is_active): ?>
+                                        <button type="button" onclick="confirmDeactivate(<?php echo $pid; ?>)" class="btn btn-sm btn-secondary w-100">Désactiver</button>
+                                    <?php else: ?>
+                                        <button type="button" onclick="confirmReactivate(<?php echo $pid; ?>)" class="btn btn-sm btn-success w-100">Réactiver</button>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -260,10 +293,21 @@ body.admin-page {
 })();
 
 function confirmDelete(productId) {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.')) return;
+    if (!confirm('Êtes-vous sûr de vouloir SUPPRIMER ce produit ? Cette action est irréversible.')) return;
+    // redirige vers le script delete_product.php qui gère soft-delete vs physical delete
     window.location.href = 'delete_product.php?id=' + encodeURIComponent(productId);
+}
+
+function confirmDeactivate(productId) {
+    if (!confirm('Désactiver le produit empêchera sa vente mais conservera les commandes historiques. Continuer ?')) return;
+    window.location.href = 'list_products.php?action=deactivate&id=' + encodeURIComponent(productId);
+}
+
+function confirmReactivate(productId) {
+    if (!confirm('Réactiver ce produit le rendra à nouveau visible et achetable. Continuer ?')) return;
+    window.location.href = 'list_products.php?action=reactivate&id=' + encodeURIComponent(productId);
 }
 </script>
 
 <?php include 'includes/footer.php'; ?>
-<?php ob_end_flush(); ?>
+<?php ob_end_flush();

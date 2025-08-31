@@ -1,0 +1,30 @@
+/* Contrainte de largeur du container de l'image carrousel */
+.order-carousel {
+    width: 100px;
+    flex: 0 0 100px;
+}
+
+/* Assure la hauteur, le recadrage et le rendu des images du carrousel */
+.order-carousel .carousel-inner img,
+.order-item-img {
+    height: 100px;
+    object-fit: cover;
+    width: 100%;
+    display: block;
+}
+
+/* Petite marge à droite si nécessaire (utilisé par la classe mr-3) */
+.order-carousel + .ml-3 {
+    margin-left: 0.75rem;
+}
+
+/* Si vous voulez des ajustements pour la section confirmation */
+.confirmation-section {
+    max-width: 900px;
+}
+
+/* Ensure carousel controls are visible over images */
+.order-carousel .carousel-control-prev-icon,
+.order-carousel .carousel-control-next-icon {
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+}

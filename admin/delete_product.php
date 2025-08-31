@@ -32,11 +32,11 @@ if ($id <= 0) {
 
 // Vérifier que le produit existe
 try {
-    $query = $pdo->prepare("SELECT * FROM items WHERE id = ?");
-    $query->execute([$id]);
-    $product = $query->fetch(PDO::FETCH_ASSOC);
+    $q = $pdo->prepare("SELECT * FROM items WHERE id = ?");
+    $q->execute([$id]);
+    $product = $q->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    // Erreur BD : journaliser la notification persistante
+    // journaliser et rediriger
     try {
         $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
         $stmt->execute([
@@ -44,9 +44,9 @@ try {
             "Erreur lecture produit ID $id : " . $e->getMessage()
         ]);
     } catch (Exception $_) {
-        // ignorer erreur de journalisation
+        // ignore
     }
-    $_SESSION['error'] = "Erreur base de données.";
+    $_SESSION['error'] = "Erreur base de données : " . $e->getMessage();
     header("Location: list_products.php");
     exit;
 }
@@ -80,65 +80,116 @@ if (!function_exists('guardDemoAdmin') || !guardDemoAdmin()) {
 try {
     $pdo->beginTransaction();
 
-    // Supprimer les prévisions liées (FK sans ON DELETE CASCADE)
-    $stmt = $pdo->prepare("DELETE FROM previsions WHERE item_id = ?");
-    $stmt->execute([$id]);
+    // Vérifier références dans order_details
+    $refStmt = $pdo->prepare("SELECT COUNT(*) FROM order_details WHERE item_id = ?");
+    $refStmt->execute([$id]);
+    $refCount = (int)$refStmt->fetchColumn();
 
-    // Supprimer les entrées panier liées (si existant)
-    $stmt = $pdo->prepare("DELETE FROM cart WHERE item_id = ?");
-    $stmt->execute([$id]);
+    if ($refCount > 0) {
+        // Produit référencé par des commandes -> soft-delete
+        $upd = $pdo->prepare("UPDATE items SET is_active = 0, deleted_at = NOW() WHERE id = ?");
+        $ok = $upd->execute([$id]);
 
-    // Supprimer les favoris liés
-    $stmt = $pdo->prepare("DELETE FROM favorites WHERE item_id = ?");
-    $stmt->execute([$id]);
+        if ($ok) {
+            // Nettoyer paniers/favoris pour empêcher nouvel achat depuis le front
+            try {
+                $pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$id]);
+                $pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$id]);
+            } catch (Exception $_) {
+                // ne pas bloquer la désactivation si ces suppressions échouent
+            }
 
-    // Supprimer les images associées au produit (fichiers physiques)
-    $stmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ?");
-    $stmt->execute([$id]);
-    $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Notification non persistante indiquant la désactivation
+            try {
+                $note = $pdo->prepare("INSERT INTO notifications (`type`,`message`,`is_persistent`) VALUES (?, ?, 0)");
+                $note->execute([
+                    'info',
+                    "Produit '{$product_name}' désactivé par " . ($_SESSION['admin_name'] ?? 'admin') . " (présent dans {$refCount} commande(s))"
+                ]);
+            } catch (Exception $_) {
+                // ignore logging failure
+            }
 
-    foreach ($images as $image) {
-        $file_path = __DIR__ . "/../assets/images/" . ($image['image'] ?? '');
-        if (!empty($image['image']) && file_exists($file_path)) {
-            // tenter suppression, ignorer erreur si inaccessible
-            @unlink($file_path);
+            $pdo->commit();
+            $_SESSION['success'] = "Produit désactivé car lié à des commandes existantes.";
+        } else {
+            $pdo->rollBack();
+            $_SESSION['error'] = "Erreur lors de la désactivation du produit.";
         }
-    }
-
-    // Supprimer les enregistrements product_images
-    $stmt = $pdo->prepare("DELETE FROM product_images WHERE product_id = ?");
-    $stmt->execute([$id]);
-
-    // Supprimer le produit (doit maintenant réussir si toutes les dépendances supprimées)
-    $stmt = $pdo->prepare("DELETE FROM items WHERE id = ?");
-    $ok = $stmt->execute([$id]);
-
-    if ($ok) {
-        $_SESSION['success'] = "Produit supprimé avec succès.";
-        // Notification non persistante (journal)
-        try {
-            $note = $pdo->prepare("INSERT INTO notifications (`type`,`message`,`is_persistent`) VALUES (?, ?, 0)");
-            $note->execute([
-                'info',
-                "Produit '{$product_name}' supprimé par " . ($_SESSION['admin_name'] ?? 'admin')
-            ]);
-        } catch (Exception $_) {
-            // ignore logging failure
-        }
-        $pdo->commit();
     } else {
-        $pdo->rollBack();
-        // Notification persistante en cas d'échec de suppression
-        try {
-            $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
-            $stmt->execute([
-                'error',
-                "Erreur lors de la suppression du produit ID $id (admin ID " . ($_SESSION['admin_id'] ?? 'inconnu') . ")"
-            ]);
-        } catch (Exception $_) {
-            // ignore
+        // Aucun lien dans order_details -> suppression physique
+        // Supprimer les prévisions liées (FK sans ON DELETE CASCADE)
+        $stmt = $pdo->prepare("DELETE FROM previsions WHERE item_id = ?");
+        $stmt->execute([$id]);
+
+        // Supprimer les entrées panier liées (si existant)
+        $stmt = $pdo->prepare("DELETE FROM cart WHERE item_id = ?");
+        $stmt->execute([$id]);
+
+        // Supprimer favoris
+        $stmt = $pdo->prepare("DELETE FROM favorites WHERE item_id = ?");
+        $stmt->execute([$id]);
+
+        // Supprimer images physiques et enregistrements product_images
+        $stmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ?");
+        $stmt->execute([$id]);
+        $imgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $failed_unlinks = [];
+        foreach ($imgs as $img) {
+            $paths = [
+                __DIR__ . "/../assets/images/" . $img['image'],
+                __DIR__ . "/../assets/images/products/" . $img['image'],
+                __DIR__ . "/../assets/images/" . basename($img['image'])
+            ];
+            foreach ($paths as $p) {
+                if (file_exists($p)) {
+                    try {
+                        @unlink($p);
+                    } catch (Exception $e) {
+                        $failed_unlinks[] = $p;
+                    }
+                }
+            }
         }
-        $_SESSION['error'] = "Erreur lors de la suppression du produit.";
+        $pdo->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$id]);
+
+        // Supprimer le produit
+        $stmt = $pdo->prepare("DELETE FROM items WHERE id = ?");
+        $ok = $stmt->execute([$id]);
+
+        if ($ok) {
+            $_SESSION['success'] = "Produit supprimé avec succès.";
+            // Notification non persistante (journal)
+            try {
+                $note = $pdo->prepare("INSERT INTO notifications (`type`,`message`,`is_persistent`) VALUES (?, ?, 0)");
+                $note->execute([
+                    'info',
+                    "Produit '{$product_name}' supprimé par " . ($_SESSION['admin_name'] ?? 'admin')
+                ]);
+            } catch (Exception $_) {
+                // ignore logging failure
+            }
+
+            // Informer si certains fichiers n'ont pas pu être supprimés
+            if (!empty($failed_unlinks)) {
+                $_SESSION['success'] = "Produit supprimé. Certains fichiers n'ont pas pu être supprimés : " . implode(', ', array_slice($failed_unlinks, 0, 5)) . (count($failed_unlinks) > 5 ? '...' : '');
+            }
+
+            $pdo->commit();
+        } else {
+            $pdo->rollBack();
+            // Notification persistante en cas d'échec de suppression
+            try {
+                $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
+                $stmt->execute([
+                    'error',
+                    "Erreur lors de la suppression du produit ID $id (admin ID " . ($_SESSION['admin_id'] ?? 'inconnu') . ")"
+                ]);
+            } catch (Exception $_) {
+                // ignore
+            }
+            $_SESSION['error'] = "Erreur lors de la suppression du produit.";
+        }
     }
 } catch (Exception $e) {
     // Rollback et journalisation
@@ -159,3 +210,4 @@ try {
 
 // Redirection vers la liste
 header("Location: list_products.php");
+exit;

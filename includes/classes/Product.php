@@ -42,6 +42,24 @@ class Product {
         return $this->data['created_at'] ?? null;
     }
     
+    public function getUpdatedAt() {
+        return $this->data['updated_at'] ?? null;
+    }
+    
+    public function isActive() {
+        // If column missing in DB, default to true
+        if (!array_key_exists('is_active', $this->data)) return true;
+        return (int)($this->data['is_active'] ?? 1) === 1;
+    }
+    
+    public function getDeletedAt() {
+        return $this->data['deleted_at'] ?? null;
+    }
+    
+    public function getCategory() {
+        return $this->data['category'] ?? null;
+    }
+    
     public function getData() {
         return $this->data;
     }
@@ -67,7 +85,7 @@ class Product {
         
         try {
             $stmt = $this->pdo->prepare("
-                SELECT id, image, position 
+                SELECT id, image, position, caption
                 FROM product_images 
                 WHERE product_id = ? 
                 ORDER BY position ASC
@@ -111,18 +129,32 @@ class Product {
         if (!$this->id) return false;
         
         try {
-            $old_stock = $this->getStock();
+            // If caller has opened a transaction, obtain a FOR UPDATE lock to avoid races
+            if ($this->pdo->inTransaction()) {
+                $lockStmt = $this->pdo->prepare("SELECT stock, stock_alert_threshold, name FROM items WHERE id = ? FOR UPDATE");
+                $lockStmt->execute([$this->id]);
+                $row = $lockStmt->fetch(PDO::FETCH_ASSOC);
+                if (!$row) {
+                    return false;
+                }
+                $old_stock = intval($row['stock']);
+                $threshold = isset($row['stock_alert_threshold']) ? intval($row['stock_alert_threshold']) : $this->getStockAlertThreshold();
+            } else {
+                // No external transaction: read from cached/internal data
+                $old_stock = $this->getStock();
+                $threshold = $this->getStockAlertThreshold();
+            }
             
-            $stmt = $this->pdo->prepare("UPDATE items SET stock = ? WHERE id = ?");
-            $success = $stmt->execute([$new_stock, $this->id]);
+            $stmt = $this->pdo->prepare("UPDATE items SET stock = ?, updated_at = NOW() WHERE id = ?");
+            $success = $stmt->execute([intval($new_stock), $this->id]);
             
             if ($success) {
-                $this->data['stock'] = $new_stock;
+                $this->data['stock'] = intval($new_stock);
                 
                 // Créer une notification si stock critique
                 if ($new_stock == 0) {
                     $this->createStockAlert('critical', $admin_id);
-                } elseif ($new_stock <= $this->getStockAlertThreshold()) {
+                } elseif ($new_stock <= $threshold) {
                     $this->createStockAlert('low', $admin_id);
                 }
                 
@@ -136,6 +168,142 @@ class Product {
             return false;
         }
     }
+
+    /**
+     * Décrémente le stock de manière sécurisée et centralisée.
+     * - Verrouille la ligne produit (SELECT ... FOR UPDATE)
+     * - Vérifie la disponibilité
+     * - Met à jour le stock (stock = stock - $qty)
+     * - Crée les notifications si seuil atteint / rupture
+     * - Log l'opération
+     *
+     * Retourne true si succès, false sinon.
+     */
+    public function decrementStock(int $qty, $admin_id = null) {
+        if (!$this->id) return false;
+        $qty = max(0, $qty);
+        if ($qty <= 0) return false;
+
+        try {
+            // Démarrer transaction si pas déjà en transaction
+            $ownTx = false;
+            if (!$this->pdo->inTransaction()) {
+                $this->pdo->beginTransaction();
+                $ownTx = true;
+            }
+
+            // Verrouiller la ligne produit
+            $stmt = $this->pdo->prepare("SELECT stock, stock_alert_threshold, name FROM items WHERE id = ? FOR UPDATE");
+            $stmt->execute([$this->id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                if ($ownTx && $this->pdo->inTransaction()) $this->pdo->rollBack();
+                return false;
+            }
+
+            $available = intval($row['stock']);
+            $threshold = isset($row['stock_alert_threshold']) ? intval($row['stock_alert_threshold']) : $this->getStockAlertThreshold();
+
+            if ($available < $qty) {
+                // stock insuffisant -> rollback and fail
+                if ($ownTx && $this->pdo->inTransaction()) $this->pdo->rollBack();
+                return false;
+            }
+
+            $new_stock = $available - $qty;
+
+            $upd = $this->pdo->prepare("UPDATE items SET stock = ?, updated_at = NOW() WHERE id = ?");
+            $upd->execute([$new_stock, $this->id]);
+
+            // Notifications / alertes
+            if ($new_stock == 0) {
+                $this->createStockAlert('critical', $admin_id);
+            } elseif ($new_stock <= $threshold) {
+                $this->createStockAlert('low', $admin_id);
+            }
+
+            // Log du changement
+            $this->logStockChange($available, $new_stock, $admin_id);
+
+            // Commit si on a ouvert la transaction
+            if ($ownTx && $this->pdo->inTransaction()) {
+                $this->pdo->commit();
+            }
+
+            // Recharger les données internes pour rester cohérent
+            $this->loadData();
+
+            return true;
+        } catch (PDOException $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            error_log("Product decrementStock Error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Incrémente le stock de manière sécurisée et centralisée.
+     * - Verrouille la ligne produit (SELECT ... FOR UPDATE)
+     * - Met à jour le stock (stock = stock + $qty)
+     * - Crée notification de réapprovisionnement si nécessaire
+     * - Log l'opération
+     *
+     * Retourne true si succès, false sinon.
+     */
+    public function incrementStock(int $qty, $admin_id = null) {
+        if (!$this->id) return false;
+        $qty = max(0, $qty);
+        if ($qty <= 0) return false;
+
+        try {
+            $ownTx = false;
+            if (!$this->pdo->inTransaction()) {
+                $this->pdo->beginTransaction();
+                $ownTx = true;
+            }
+
+            // Verrouiller la ligne produit
+            $stmt = $this->pdo->prepare("SELECT stock, stock_alert_threshold, name FROM items WHERE id = ? FOR UPDATE");
+            $stmt->execute([$this->id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                if ($ownTx && $this->pdo->inTransaction()) $this->pdo->rollBack();
+                return false;
+            }
+
+            $old_stock = intval($row['stock']);
+            $new_stock = $old_stock + $qty;
+
+            $upd = $this->pdo->prepare("UPDATE items SET stock = ?, updated_at = NOW() WHERE id = ?");
+            $upd->execute([$new_stock, $this->id]);
+
+            // Si on passe de 0 → >0, créer notification de réapprovisionnement
+            if ($old_stock == 0 && $new_stock > 0) {
+                try {
+                    $msg = "Produit '{$row['name']}' réapprovisionné ({$qty} ajoutés, maintenant {$new_stock})";
+                    $note = $this->pdo->prepare("INSERT INTO notifications (`type`,`message`,`is_persistent`) VALUES (?, ?, 0)");
+                    $note->execute(['stock', $msg, 0]);
+                } catch (Exception $_) {
+                    // ignore notification failure
+                }
+            }
+
+            // Log du changement
+            $this->logStockChange($old_stock, $new_stock, $admin_id);
+
+            if ($ownTx && $this->pdo->inTransaction()) $this->pdo->commit();
+
+            // Recharger données internes
+            $this->loadData();
+            return true;
+        } catch (PDOException $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            error_log("Product incrementStock Error: " . $e->getMessage());
+            return false;
+        }
+    }
     
     public function updatePrice($new_price, $admin_id = null) {
         if (!$this->id) return false;
@@ -143,11 +311,11 @@ class Product {
         try {
             $old_price = $this->getPrice();
             
-            $stmt = $this->pdo->prepare("UPDATE items SET price = ? WHERE id = ?");
-            $success = $stmt->execute([$new_price, $this->id]);
+            $stmt = $this->pdo->prepare("UPDATE items SET price = ?, updated_at = NOW() WHERE id = ?");
+            $success = $stmt->execute([round(floatval($new_price), 2), $this->id]);
             
             if ($success) {
-                $this->data['price'] = $new_price;
+                $this->data['price'] = round(floatval($new_price), 2);
                 
                 // Log du changement de prix
                 $this->logPriceChange($old_price, $new_price, $admin_id);
@@ -163,12 +331,13 @@ class Product {
     public function update($data, $admin_id = null) {
         if (!$this->id) return false;
         
-        $allowed_fields = ['name', 'description', 'price', 'stock', 'stock_alert_threshold'];
+        // Autoriser is_active, deleted_at et category dans les mises à jour admin si fournis
+        $allowed_fields = ['name', 'description', 'price', 'stock', 'stock_alert_threshold', 'category', 'is_active', 'deleted_at'];
         $update_fields = [];
         $values = [];
         
         foreach ($allowed_fields as $field) {
-            if (isset($data[$field])) {
+            if (array_key_exists($field, $data)) {
                 $update_fields[] = "$field = ?";
                 $values[] = $data[$field];
             }
@@ -178,7 +347,7 @@ class Product {
         
         try {
             $values[] = $this->id;
-            $stmt = $this->pdo->prepare("UPDATE items SET " . implode(', ', $update_fields) . " WHERE id = ?");
+            $stmt = $this->pdo->prepare("UPDATE items SET " . implode(', ', $update_fields) . ", updated_at = NOW() WHERE id = ?");
             $success = $stmt->execute($values);
             
             if ($success) {
@@ -216,11 +385,11 @@ class Product {
     }
     
     public function isAvailable() {
-        return $this->getStock() > 0;
+        return $this->isActive() && $this->getStock() > 0;
     }
     
     public function canPurchase($quantity = 1) {
-        return $this->getStock() >= $quantity;
+        return $this->isActive() && $this->getStock() >= $quantity;
     }
     
     // === MÉTHODES DE CRÉATION ===
@@ -229,25 +398,31 @@ class Product {
         $required_fields = ['name', 'description', 'price', 'stock'];
         
         foreach ($required_fields as $field) {
-            if (!isset($data[$field]) || empty($data[$field])) {
+            if (!isset($data[$field]) || $data[$field] === '') {
                 throw new InvalidArgumentException("Le champ '$field' est requis");
             }
         }
         
         try {
-            $stmt = $pdo->prepare("
-                INSERT INTO items (name, description, price, stock, stock_alert_threshold, created_at) 
-                VALUES (?, ?, ?, ?, ?, NOW())
-            ");
+            // Préparer valeurs par défaut pour is_active / deleted_at
+            $is_active = isset($data['is_active']) ? intval($data['is_active']) : 1;
+            $deleted_at = null;
+            $stock_alert_threshold = isset($data['stock_alert_threshold']) ? intval($data['stock_alert_threshold']) : 5;
+            $category = $data['category'] ?? null;
             
-            $stock_alert_threshold = $data['stock_alert_threshold'] ?? 5;
+            $stmt = $pdo->prepare("
+                INSERT INTO items (name, description, price, stock, stock_alert_threshold, category, is_active, deleted_at, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
+            ");
             
             $success = $stmt->execute([
                 $data['name'],
-                $data['description'], 
-                $data['price'],
-                $data['stock'],
-                $stock_alert_threshold
+                $data['description'],
+                round(floatval($data['price']), 2),
+                intval($data['stock']),
+                intval($stock_alert_threshold),
+                ($category === '' ? null : $category),
+                $is_active
             ]);
             
             if ($success) {
@@ -281,49 +456,99 @@ class Product {
         if (!$this->id) return false;
         
         try {
-            $this->pdo->beginTransaction();
+            // Vérifier si le produit est référencé dans order_details
+            $refStmt = $this->pdo->prepare("SELECT COUNT(*) FROM order_details WHERE item_id = ?");
+            $refStmt->execute([$this->id]);
+            $refCount = (int)$refStmt->fetchColumn();
             
-            // Supprimer les images associées
-            $images = $this->getImages();
-            foreach ($images as $image) {
-                $image_path = "../assets/images/" . $image['image'];
-                if (file_exists($image_path)) {
-                    unlink($image_path);
+            if ($refCount > 0) {
+                // Soft-delete : désactiver le produit et conserver l'historique des commandes
+                try {
+                    $this->pdo->beginTransaction();
+                    
+                    $upd = $this->pdo->prepare("UPDATE items SET is_active = 0, deleted_at = NOW(), updated_at = NOW() WHERE id = ?");
+                    $upd->execute([$this->id]);
+                    
+                    // Nettoyer paniers et favoris pour éviter nouvel achat
+                    $this->pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$this->id]);
+                    $this->pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$this->id]);
+                    
+                    // Notification admin
+                    if ($admin_id) {
+                        $notif = $this->pdo->prepare("
+                            INSERT INTO notifications (type, message, is_persistent)
+                            VALUES (?, ?, 0)
+                        ");
+                        $notif->execute([
+                            'admin_action',
+                            "Produit '{$this->getName()}' désactivé (soft-delete) par admin ID {$admin_id} - présent dans {$refCount} commande(s)"
+                        ]);
+                    }
+                    
+                    $this->pdo->commit();
+                    // Recharger données pour refléter is_active si nécessaire
+                    $this->loadData();
+                    return true;
+                } catch (PDOException $e) {
+                    if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+                    error_log("Product soft-delete Error: " . $e->getMessage());
+                    return false;
                 }
             }
             
-            // Supprimer les enregistrements de la base
-            $this->pdo->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$this->id]);
-            $this->pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$this->id]);
-            $this->pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$this->id]);
-            $this->pdo->prepare("DELETE FROM previsions WHERE item_id = ?")->execute([$this->id]);
-            
-            // Supprimer le produit
-            $stmt = $this->pdo->prepare("DELETE FROM items WHERE id = ?");
-            $success = $stmt->execute([$this->id]);
-            
-            if ($success) {
-                // Créer une notification de suppression
-                if ($admin_id) {
-                    $notif_stmt = $this->pdo->prepare("
-                        INSERT INTO notifications (type, message, is_persistent) 
-                        VALUES (?, ?, 0)
-                    ");
-                    $notif_stmt->execute([
-                        'admin_action',
-                        "Produit '{$this->getName()}' supprimé par admin ID {$admin_id}"
-                    ]);
+            // Aucun lien dans order_details -> suppression physique complète
+            try {
+                $this->pdo->beginTransaction();
+                
+                // Supprimer les images physiques
+                $images = $this->getImages();
+                foreach ($images as $image) {
+                    $image_path = __DIR__ . "/../../assets/images/" . $image['image'];
+                    if (file_exists($image_path)) {
+                        try {
+                            @unlink($image_path);
+                        } catch (Exception $e) {
+                            // ignorer les erreurs unlink
+                        }
+                    }
                 }
                 
-                $this->pdo->commit();
-                return true;
-            } else {
-                $this->pdo->rollBack();
+                // Supprimer les enregistrements de la base
+                $this->pdo->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$this->id]);
+                $this->pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$this->id]);
+                $this->pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$this->id]);
+                $this->pdo->prepare("DELETE FROM previsions WHERE item_id = ?")->execute([$this->id]);
+                
+                // Supprimer le produit
+                $stmt = $this->pdo->prepare("DELETE FROM items WHERE id = ?");
+                $success = $stmt->execute([$this->id]);
+                
+                if ($success) {
+                    // Créer une notification de suppression
+                    if ($admin_id) {
+                        $notif_stmt = $this->pdo->prepare("
+                            INSERT INTO notifications (type, message, is_persistent) 
+                            VALUES (?, ?, 0)
+                        ");
+                        $notif_stmt->execute([
+                            'admin_action',
+                            "Produit '{$this->getName()}' supprimé par admin ID {$admin_id}"
+                        ]);
+                    }
+                    
+                    $this->pdo->commit();
+                    return true;
+                } else {
+                    if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+                    return false;
+                }
+            } catch (PDOException $e) {
+                if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+                error_log("Product delete Error: " . $e->getMessage());
                 return false;
             }
         } catch (PDOException $e) {
-            $this->pdo->rollBack();
-            error_log("Product delete Error: " . $e->getMessage());
+            error_log("Product delete Check Error: " . $e->getMessage());
             return false;
         }
     }
@@ -416,8 +641,13 @@ class Product {
             $where_conditions[] = "stock <= stock_alert_threshold AND stock > 0";
         }
         
+        // Par défaut, n'inclure que les produits actifs sauf si filter explicitement demandé
+        if (empty($filters['include_inactive'])) {
+            $where_conditions[] = "IFNULL(is_active, 1) = 1";
+        }
+        
         $where_clause = !empty($where_conditions) ? 
-            "WHERE " . implode(' AND ', $where_conditions) : "";
+            "WHERE " . implode(" AND ", $where_conditions) : "";
         
         $order_by = match($filters['sort'] ?? 'name') {
             'price_asc' => 'ORDER BY price ASC',
@@ -459,7 +689,7 @@ class Product {
         }
     }
     
-    public static function getOutOfStock($pdo) {
+     public static function getOutOfStock($pdo) {
         try {
             $stmt = $pdo->query("
                 SELECT * FROM items 

@@ -1,0 +1,124 @@
+/* Favorites — overrides pour s'aligner sur products.css/new_products.css
+   Garde uniquement les règles spécifiques à la section Favoris :
+   - limites de largeur
+   - ajustements d'images
+   - petites modifications visuelles propres à la liste des favoris
+*/
+
+/* Section principale */
+.favorites-section {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    max-width: 1200px;
+    margin: 0 auto 4rem auto;
+}
+
+/* Cards spécifiques */
+.favorites-section .card {
+    border: none;
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.85);
+    box-shadow: 0 12px 36px rgba(31,38,135,0.06);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Ajustements sur l'image du carrousel */
+.favorite-img {
+    height: 220px;
+    object-fit: cover;
+    width: 100%;
+    display: block;
+    border-radius: 12px 12px 0 0;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+/* Corps de la card */
+.favorites-section .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    background: transparent;
+}
+
+/* Titres et textes */
+.favorites-section h2 {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+}
+
+.favorites-section .card-title {
+    font-size: 1.05rem;
+    margin-bottom: 0.25rem;
+    color: #222;
+}
+
+.favorites-section .card-text {
+    color: #6b7280;
+    margin-bottom: 6px;
+}
+
+/* Prix */
+.favorites-section .h5 {
+    color: #111;
+}
+
+/* Boutons : s'appuient sur la structure ultra-* définie dans products.css */
+.favorites-section .ultra-actions {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    gap: 10px;
+}
+
+/* Ajustements responsive */
+@media (max-width: 992px) {
+    .favorites-section {
+        padding: 16px;
+    }
+    .favorite-img {
+        height: 180px;
+    }
+    .favorites-section .ultra-actions {
+        bottom: 12px;
+        right: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .favorites-section {
+        padding: 12px;
+    }
+    .favorite-img {
+        height: 140px;
+    }
+    .favorites-section .card {
+        border-radius: 12px;
+    }
+}
+
+/* Accessibilité - focus */
+.favorites-section .product-card:focus {
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
+    transform: translateY(-4px);
+}
+
+/* Fallbacks / helper classes */
+.favorites-section .alert {
+    margin-bottom: 1rem;
+}
+
+/* Small tweaks to match product list spacing */
+.favorites-section .card {
+    margin-bottom: 1rem;
+}
+
+/* Ensure carousel controls remain visible above card */
+.favorites-section .carousel-control-prev,
+.favorites-section .carousel-control-next {
+    z-index: 60;
+}

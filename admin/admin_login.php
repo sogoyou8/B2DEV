@@ -17,20 +17,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $_SESSION['admin_name'] = $user['name'];
         $_SESSION['admin_logged_in'] = true;
         $_SESSION['is_demo'] = $user['is_demo'];
+        $_SESSION['logged_in'] = true;
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['user_name'] = $user['name'] ?? '';
+        $_SESSION['user_email'] = $user['email'] ?? '';
         header("Location: dashboard.php");
         exit;
     } else {
-    $error = "Email ou mot de passe incorrect.";
+        $error = "Email ou mot de passe incorrect.";
 
-    // Ajout d'une notification persistante en base
-    $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
-    $stmt->execute([
-        'security',
-        "Tentative de connexion admin échouée pour l'email : " . htmlspecialchars($email)
-    ]);
-}
+        // Ajout d'une notification persistante en base
+        $stmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
+        $stmt->execute([
+            'security',
+            "Tentative de connexion admin échouée pour l'email : " . htmlspecialchars($email)
+        ]);
+    }
 }
 include 'includes/header.php';
+
+// Load page-specific stylesheet (separated from header inline styles)
+echo '<link rel="stylesheet" href="../assets/css/admin/admin_login.css">';
 ?>
 <main>
     <section class="mt-5">

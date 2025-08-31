@@ -1,0 +1,19 @@
+.input-group-append .btn,
+#togglePassword {
+    height: 40px; /* même hauteur que le champ */
+    min-width: 48px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    font-size: 1.2rem;
+}
+.input-group .form-control {
+    border-right: 0;
+    height: 40px;
+    font-size: 1rem;
+}

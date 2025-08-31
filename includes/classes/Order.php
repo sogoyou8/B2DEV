@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/Product.php';
+
 class Order {
     private $pdo;
     private $id;
@@ -201,6 +203,15 @@ class Order {
     }
     
     private function addOrderDetail($item) {
+        // Idempotence : si la ligne existe déjà pour cette commande et cet item, ne rien faire
+        $checkStmt = $this->pdo->prepare("SELECT COUNT(*) FROM order_details WHERE order_id = ? AND item_id = ?");
+        $checkStmt->execute([$this->id, $item['item_id']]);
+        $exists = (int)$checkStmt->fetchColumn();
+        if ($exists > 0) {
+            // ligne déjà insérée -> ne pas décrémenter à nouveau
+            return;
+        }
+
         $stmt = $this->pdo->prepare("
             INSERT INTO order_details (order_id, item_id, quantity, price)
             VALUES (?, ?, ?, ?)
@@ -213,14 +224,16 @@ class Order {
             $item['price']
         ]);
         
-        // Décrémenter le stock
-        $stock_stmt = $this->pdo->prepare("
-            UPDATE items SET stock = stock - ? WHERE id = ?
-        ");
-        $stock_stmt->execute([$item['quantity'], $item['item_id']]);
-        
-        // Vérifier stock faible
-        $this->checkLowStock($item['item_id']);
+        // Utiliser le wrapper Product::decrementStock pour centraliser la décrémentation
+        $product = new Product($this->pdo, $item['item_id']);
+        $decremented = $product->decrementStock((int)$item['quantity']);
+        if (!$decremented) {
+            // Si la décrémentation échoue (stock insuffisant ou erreur), lever une exception
+            // pour provoquer le rollback en amont. Le message permet de diagnostiquer.
+            throw new Exception("Stock insuffisant ou erreur lors de la décrémentation pour l'item ID {$item['item_id']}");
+        }
+
+        // Les notifications de stock faible/rupture sont gérées par Product::decrementStock()
     }
     
     // === MÉTHODES MÉTIER ===
@@ -276,12 +289,20 @@ class Order {
     }
     
     private function onCancelled() {
-        // Remettre les articles en stock
+        // Remettre les articles en stock via la méthode centralisée Product::incrementStock
+        // pour garantir verrouillage, logging et notifications cohérents.
         foreach ($this->items as $item) {
-            $stmt = $this->pdo->prepare("
-                UPDATE items SET stock = stock + ? WHERE id = ?
-            ");
-            $stmt->execute([$item['quantity'], $item['item_id']]);
+            try {
+                $product = new Product($this->pdo, $item['item_id']);
+                $ok = $product->incrementStock((int)$item['quantity']);
+                if (!$ok) {
+                    // Journaliser l'échec mais continuer pour les autres items
+                    error_log("Order::onCancelled - impossible d'incrémenter le stock pour item ID {$item['item_id']} (order ID {$this->id})");
+                }
+            } catch (Exception $e) {
+                // Ne pas interrompre la boucle en cas d'erreur, logger pour diagnostic
+                error_log("Order::onCancelled - exception incrementStock item {$item['item_id']}: " . $e->getMessage());
+            }
         }
     }
     

@@ -6,10 +6,13 @@ if (session_status() == PHP_SESSION_NONE) {
 include 'includes/header.php';
 include 'includes/db.php';
 
-$query = $_GET['query'];
+$query = $_GET['query'] ?? '';
 $stmt = $pdo->prepare("SELECT * FROM items WHERE name LIKE ? OR description LIKE ?");
 $stmt->execute(["%$query%", "%$query%"]);
 $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Add search-specific stylesheet
+echo '<link rel="stylesheet" href="assets/css/user/search.css">' ;
 ?>
 <main class="container py-4">
     <section class="search-results-section bg-light p-5 rounded shadow-sm">
@@ -33,8 +36,7 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <div class="carousel-item <?php echo $index === 0 ? 'active' : ''; ?>">
                                                 <img src="assets/images/<?php echo htmlspecialchars($image['image']); ?>" 
                                                      alt="<?php echo htmlspecialchars($product['name']); ?>" 
-                                                     class="card-img-top" 
-                                                     style="height: 200px; object-fit: cover;">
+                                                     class="card-img-top">
                                             </div>
                                         <?php endforeach; ?>
                                     </div>
@@ -53,8 +55,7 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <!-- Image par défaut si aucune image -->
                                 <img src="assets/images/default.png" 
                                      alt="Image par défaut" 
-                                     class="card-img-top" 
-                                     style="height: 200px; object-fit: cover;">
+                                     class="card-img-top">
                             <?php endif; ?>
                             
                             <div class="card-body">

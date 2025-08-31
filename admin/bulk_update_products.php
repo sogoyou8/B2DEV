@@ -10,6 +10,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 
 include_once 'admin_demo_guard.php';
 include_once '../includes/db.php';
+require_once '../includes/classes/Product.php';
 include_once 'includes/header.php';
 
 // Récupérer d'éventuelles anciennes valeurs / erreurs après POST
@@ -90,46 +91,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             $failed_files = [];
+            $hardDeleted = 0;
+            $softDeleted = 0;
             foreach ($selected as $id_raw) {
                 $id = intval($id_raw);
                 if ($id <= 0) continue;
-                // Supprimer images associées (chemins possibles)
-                $stmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ?");
-                $stmt->execute([$id]);
-                $imgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($imgs as $img) {
-                    $paths = [
-                        __DIR__ . "/../assets/images/" . $img['image'],
-                        __DIR__ . "/../assets/images/products/" . $img['image'],
-                        __DIR__ . "/../assets/images/" . basename($img['image'])
-                    ];
-                    foreach ($paths as $p) {
-                        if (file_exists($p)) {
-                            try {
-                                @unlink($p);
-                            } catch (Exception $e) {
-                                $failed_files[] = $p;
+
+                // Vérifier si le produit est référencé dans order_details
+                $refStmt = $pdo->prepare("SELECT COUNT(*) FROM order_details WHERE item_id = ?");
+                $refStmt->execute([$id]);
+                $refCount = (int)$refStmt->fetchColumn();
+
+                if ($refCount > 0) {
+                    // Soft-delete : désactiver et conserver l'historique des commandes
+                    $upd = $pdo->prepare("UPDATE items SET is_active = 0, deleted_at = NOW() WHERE id = ?");
+                    $upd->execute([$id]);
+
+                    // Nettoyer paniers/favoris pour éviter nouvel achat depuis le front
+                    try {
+                        $pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$id]);
+                        $pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$id]);
+                    } catch (Exception $_) {
+                        // ignore non-fatal cleanup errors
+                    }
+
+                    $softDeleted++;
+                } else {
+                    // Aucun lien : suppression physique complète (images + enregistrements)
+                    // Supprimer images associées (chemins possibles)
+                    $stmt = $pdo->prepare("SELECT image FROM product_images WHERE product_id = ?");
+                    $stmt->execute([$id]);
+                    $imgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($imgs as $img) {
+                        $paths = [
+                            __DIR__ . "/../assets/images/" . $img['image'],
+                            __DIR__ . "/../assets/images/products/" . $img['image'],
+                            __DIR__ . "/../assets/images/" . basename($img['image'])
+                        ];
+                        foreach ($paths as $p) {
+                            if (file_exists($p)) {
+                                try {
+                                    @unlink($p);
+                                } catch (Exception $e) {
+                                    $failed_files[] = $p;
+                                }
                             }
                         }
                     }
+
+                    $pdo->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$id]);
+                    $pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$id]);
+                    $pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$id]);
+                    $pdo->prepare("DELETE FROM items WHERE id = ?")->execute([$id]);
+
+                    $hardDeleted++;
                 }
-                $pdo->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$id]);
-                $pdo->prepare("DELETE FROM favorites WHERE item_id = ?")->execute([$id]);
-                $pdo->prepare("DELETE FROM cart WHERE item_id = ?")->execute([$id]);
-                $pdo->prepare("DELETE FROM items WHERE id = ?")->execute([$id]);
             }
             $pdo->commit();
+
+            // Construire message de succès clair
+            $parts = [];
+            if ($hardDeleted > 0) $parts[] = "$hardDeleted produit(s) supprimé(s)";
+            if ($softDeleted > 0) $parts[] = "$softDeleted produit(s) désactivé(s) (soft-delete car liés à des commandes)";
+            $msgSummary = !empty($parts) ? implode(' et ', $parts) . "." : "Aucune action effectuée.";
+
             if (!empty($failed_files)) {
-                $_SESSION['success'] = "Produits supprimés. Certains fichiers n'ont pas pu être supprimés : " . implode(', ', array_slice($failed_files, 0, 5)) . (count($failed_files) > 5 ? '...' : '');
+                $_SESSION['success'] = $msgSummary . " Certains fichiers n'ont pas pu être supprimés : " . implode(', ', array_slice($failed_files, 0, 5)) . (count($failed_files) > 5 ? '...' : '');
             } else {
-                $_SESSION['success'] = "Produits supprimés avec succès.";
+                $_SESSION['success'] = $msgSummary;
             }
 
             // journalisation
             try {
                 $adminName = $_SESSION['admin_name'] ?? ($_SESSION['admin_id'] ?? 'admin');
-                $count = count($selected);
-                $msg = "Suppression en masse : $count produit(s) supprimé(s) par $adminName";
+                $countTotal = count($selected);
+                $msg = "Suppression en masse : $countTotal produit(s) traité(s) par $adminName — $msgSummary";
                 $stmtN = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, 1)");
                 $stmtN->execute(['admin_action', $msg]);
             } catch (Exception $e) {
@@ -234,9 +270,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
-        // Construire UPDATE set-based si possible (optimisé)
+        // Construire UPDATE set-based si possible (optimisé) — on exclut les changements de stock qui seront appliqués via Product::updateStock pour audit/notifications
         $setParts = [];
         $values = [];
+        $applyStockAbsolute = false;
+        $applyStockDelta = false;
+        $stockDeltaInt = 0;
 
         if ($set_price !== null && $set_price !== '') {
             // prix absolu
@@ -252,13 +291,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($set_stock !== null && $set_stock !== '') {
-            $setParts[] = "stock = ?";
-            $values[] = max(0, intval($set_stock));
+            // Nous n'ajoutons pas de setParts pour stock : on appliquera Product::updateStock par produit
+            $applyStockAbsolute = true;
+            $stockAbsoluteInt = max(0, intval($set_stock));
         } elseif ($set_stock_delta !== null && $set_stock_delta !== '') {
-            $delta = intval($set_stock_delta);
-            // Utilise GREATEST pour éviter stock négatif
-            $setParts[] = "stock = GREATEST(0, stock + ?)";
-            $values[] = $delta;
+            $applyStockDelta = true;
+            $stockDeltaInt = intval($set_stock_delta);
         }
 
         if ($set_category !== null && $set_category !== '') {
@@ -280,15 +318,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare($sql);
                 $execVals = array_merge($values, $ids);
                 $stmt->execute($execVals);
-                // Note: using PDOStatement::rowCount() is correct, but some linters flag ambiguous usage.
+                // Count modifications for non-stock updates
                 $appliedCount = $stmt->rowCount();
             } else {
                 // nothing to update
                 $appliedCount = 0;
             }
 
+            // Gérer les changements de stock via Product::updateStock pour assurer logging/notifications cohérents
+            if ($applyStockAbsolute || $applyStockDelta) {
+                foreach ($ids as $prodId) {
+                    if ($applyStockAbsolute) {
+                        $newStock = $stockAbsoluteInt;
+                    } else {
+                        // lock current stock to compute new value
+                        $curStmt = $pdo->prepare("SELECT stock FROM items WHERE id = ? FOR UPDATE");
+                        $curStmt->execute([$prodId]);
+                        $currStock = (int)$curStmt->fetchColumn();
+                        $newStock = max(0, $currStock + $stockDeltaInt);
+                    }
+
+                    $product = new Product($pdo, $prodId);
+                    $adminId = $_SESSION['admin_id'] ?? null;
+                    $res = $product->updateStock($newStock, $adminId);
+                    if (!$res) {
+                        throw new Exception("Échec de la mise à jour du stock pour le produit ID {$prodId}.");
+                    }
+                    $appliedCount++;
+                }
+            }
+
             // If price changed by percentage, we may want to normalize to 2 decimals (already done in SQL with ROUND)
-            // For stock changes, triggers/notifications handled elsewhere.
+            // For stock changes, notifications/logs handled via Product::updateStock above.
 
             $pdo->commit();
 
@@ -339,6 +400,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $csvErrors = [];
         try {
             $pdo->beginTransaction();
+            $adminId = $_SESSION['admin_id'] ?? null;
+
             while (($row = fgetcsv($handle)) !== false) {
                 // Map columns to expected
                 $mappedRow = [];
@@ -354,6 +417,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $csvErrors[] = "Ignorée ligne : ID manquant ou invalide.";
                     continue;
                 }
+
+                // Prepare changes for non-stock fields (price, category)
                 $sets = [];
                 $vals = [];
                 if ($mappedRow['price'] !== null && $mappedRow['price'] !== '') {
@@ -364,24 +429,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $vals[] = round(floatval($mappedRow['price']), 2);
                     }
                 }
+
+                // Stock handled via Product::updateStock (audit/notifications)
+                $stockToApply = null;
                 if ($mappedRow['stock'] !== null && $mappedRow['stock'] !== '') {
                     if (!is_numeric($mappedRow['stock']) || intval($mappedRow['stock']) != $mappedRow['stock']) {
                         $csvErrors[] = "ID $id : stock invalide.";
                     } else {
-                        $sets[] = "stock = ?";
-                        $vals[] = intval($mappedRow['stock']);
+                        $stockToApply = intval($mappedRow['stock']);
                     }
                 }
+
                 if ($mappedRow['category'] !== null && $mappedRow['category'] !== '') {
                     $sets[] = "category = ?";
                     $vals[] = $mappedRow['category'];
                 }
+
+                // Apply non-stock updates via UPDATE if any
+                $rowUpdated = 0;
                 if (!empty($sets)) {
                     $vals[] = $id;
                     $stmt = $pdo->prepare("UPDATE items SET " . implode(', ', $sets) . " WHERE id = ?");
                     $stmt->execute($vals);
-                    $updated += $stmt->rowCount();
+                    $rowUpdated += $stmt->rowCount();
                 }
+
+                // Apply stock update via Product wrapper if requested
+                if ($stockToApply !== null) {
+                    $product = new Product($pdo, $id);
+                    if (!$product->getId()) {
+                        $csvErrors[] = "ID $id : produit introuvable pour mise à jour du stock.";
+                    } else {
+                        $res = $product->updateStock($stockToApply, $adminId);
+                        if (!$res) {
+                            throw new Exception("Échec de la mise à jour du stock via Product::updateStock pour ID {$id}.");
+                        }
+                        // Count stock update as one modification
+                        $rowUpdated += 1;
+                    }
+                }
+
+                $updated += $rowUpdated;
             }
             $pdo->commit();
             fclose($handle);
@@ -417,45 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Mise à jour en masse - Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
-    <style>
-        :root{
-            --card-radius:12px;
-            --muted:#6c757d;
-            --bg-gradient-1:#f8fbff;
-            --bg-gradient-2:#eef7ff;
-            --accent:#0d6efd;
-            --accent-2:#6610f2;
-        }
-        body.admin-page {
-            background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
-        }
-        .panel-card {
-            border-radius: var(--card-radius);
-            background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
-            box-shadow: 0 12px 36px rgba(3,37,76,0.06);
-            padding: 1.25rem;
-        }
-        .page-title h2 {
-            margin:0;
-            font-weight:700;
-            color:var(--accent-2);
-            background: linear-gradient(90deg, var(--accent), var(--accent-2));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .help-note { color:var(--muted); font-size:.95rem; }
-        .btn-round { border-radius:8px; }
-        .thumb { width:56px; height:56px; object-fit:cover; border-radius:8px; box-shadow:0 8px 20px rgba(3,37,76,0.04); }
-        .table thead th {
-            background: linear-gradient(180deg,#fbfdff,#f2f7ff);
-            border-bottom:1px solid rgba(3,37,76,0.06);
-            font-weight:600;
-        }
-        .small-input { max-width:160px; }
-        .form-inline-gap { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-        .validation-errors { margin-bottom:.5rem; }
-    </style>
+    <link rel="stylesheet" href="../assets/css/admin/bulk_update_products.css">
 </head>
 <body class="admin-page">
 <main class="container py-4">
@@ -584,7 +634,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mt-3 d-flex justify-content-between align-items-center">
                     <div class="small text-muted">Sélectionnez des produits puis cliquez sur "Appliquer aux sélectionnés".</div>
                     <div class="d-flex gap-2">
-                        <button type="submit" name="delete_selected" class="btn btn-danger btn-sm" onclick="return confirm('Confirmer la suppression des produits sélectionnés ? Cette action est irréversible.')">Supprimer la sélection</button>
+                        <button type="submit" name="delete_selected" class="btn btn-danger btn-sm" onclick="return confirm('Confirmer la suppression des produits sélectionnés ? Cette action est irréversible. Les produits liés à des commandes seront désactivés (soft-delete).')">Supprimer la sélection</button>
                     </div>
                 </div>
             </form>
@@ -607,7 +657,4 @@ document.getElementById('checkAll')?.addEventListener('change', function(e){
     document.querySelectorAll('input[name="selected[]"]').forEach(cb => cb.checked = e.target.checked);
 });
 </script>
-<?php include_once 'includes/footer.php'; ?>
-<?php ob_end_flush(); ?>
-</body>
-</html>
+<?php include_once 'includes/footer.php';

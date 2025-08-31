@@ -17,6 +17,7 @@ if (isset($_POST['confirm_logout'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Déconnexion</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="assets/css/user/logout.css">
 </head>
 <body>
     <main class="d-flex justify-content-center align-items-center min-vh-100 bg-light">

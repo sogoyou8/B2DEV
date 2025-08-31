@@ -1,0 +1,509 @@
+:root{
+    --card-radius:12px;
+    --muted:#6c757d;
+    --bg:#f4f7fb;
+    --panel-bg: linear-gradient(180deg, #ffffff, #fbfcff);
+    --accent:#2f6bff;
+    --accent-2:#6c5ce7;
+    --surface: #ffffff;
+    --soft-shadow: 0 12px 36px rgba(31,38,135,0.06);
+    --panel-pad: 8px;
+}
+
+/* Page container compact to fit on a single page */
+html, body {
+    height: 100%;
+    background: var(--bg);
+}
+body {
+    color: #222;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    margin: 0;
+}
+.profile-wrap {
+    max-width: 940px;
+    margin: 6px auto;
+    padding: 6px;
+    display: flex;
+    justify-content: center;
+}
+
+/* Panel */
+.panel-card {
+    width: 100%;
+    border-radius: var(--card-radius);
+    background: var(--panel-bg);
+    box-shadow: var(--soft-shadow);
+    padding: var(--panel-pad);
+    border: 1px solid rgba(30,40,90,0.03);
+    overflow: visible;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+/* compact mode: try to fit viewport */
+.panel-card.compact {
+    padding: 8px;
+    line-height: 1.04;
+    font-size: 0.95rem;
+}
+
+/* tighter header */
+.profile-header {
+    display:flex;
+    gap:0.5rem;
+    align-items:center;
+    margin-bottom:0.28rem;
+    padding: 6px;
+}
+.avatar {
+    width:48px;
+    height:48px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:0.98rem;
+    font-weight:700;
+    color:#fff;
+    background: linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow: 0 8px 24px rgba(31,38,135,0.08);
+    flex-shrink:0;
+}
+.profile-meta h1 { margin:0; font-size:1rem; }
+.profile-meta .muted { color:var(--muted); font-size:.78rem; margin-top:.06rem; }
+
+/* small header actions (icons) */
+.header-actions {
+    margin-left: auto;
+    display:flex;
+    gap:8px;
+}
+.header-actions .btn {
+    width:34px;
+    height:34px;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:8px;
+}
+
+/* Grid: compact two-column (left content, right actions) */
+.grid.compact-grid {
+    display:grid;
+    grid-template-columns: 1fr 210px;
+    gap:10px;
+    align-items:start;
+}
+
+/* Left column condensed */
+.left-col .info-card.condensed {
+    padding:8px;
+    border-radius:10px;
+    background: var(--surface);
+    box-shadow: 0 6px 18px rgba(31,38,135,0.03);
+    border: 1px solid rgba(30,38,90,0.03);
+}
+.info-row { display:flex; justify-content:space-between; gap:8px; padding:6px 6px; border-bottom: 1px dashed rgba(0,0,0,0.03); }
+.info-row:last-child { border-bottom: none; }
+.info-row .label { color:var(--muted); font-size:0.8rem; }
+.info-row .value { font-weight:600; font-size:0.9rem; }
+
+/* Orders compact */
+.compact-orders { margin:0; padding:0; }
+.compact-orders li { padding:6px 0; border-bottom: 1px solid rgba(0,0,0,0.03); list-style:none; }
+.compact-orders li:last-child { border-bottom: none; }
+.order-link { color: var(--accent); font-weight:600; font-size:0.9rem; text-decoration:none; }
+.order-meta { color:var(--muted); font-size:0.8rem; margin-top:2px; }
+
+/* Right column actions */
+.right-col .form-card.compact {
+    padding:8px;
+    border-radius:10px;
+    background: var(--surface);
+    box-shadow: 0 6px 18px rgba(31,38,135,0.03);
+    border: 1px solid rgba(30,38,90,0.03);
+}
+.form-card .btn { border-radius:8px; padding:.42rem .6rem; font-weight:600; font-size:.86rem; }
+
+/* compact alerts */
+.compact-alert { padding:6px; margin-bottom:6px; font-size:0.86rem; }
+
+/* reduce margins to fit on one page */
+.panel-card .info-card { margin-bottom:8px; }
+.compact-seeall { margin-top:6px; }
+
+/* small screens: stack */
+@media (max-width: 900px) {
+    .grid.compact-grid { grid-template-columns: 1fr; }
+    .header-actions { margin-top:8px; }
+}
+
+/* accessibility focus */
+.profile-header:focus, .form-card .btn:focus, .avatar:focus {
+    outline: 3px solid rgba(47,107,255,0.12);
+    outline-offset: 2px;
+}
+
+/* fitting behavior when script scales the panel */
+.profile-wrap { transition: padding 120ms ease; }
+.panel-card { transform-origin: top center; }
+
+/* prevent panel internal scroll unless absolutely necessary */
+.panel-card.compact { max-height: none; overflow: visible; }
+
+/* Visual polish for buttons consistent with other pages */
+.btn-primary {
+    background: linear-gradient(90deg,var(--accent),var(--accent-2));
+    border: none;
+    color: #fff;
+}
+.btn-outline-primary {
+    border: 1px solid rgba(47,107,255,0.12);
+    color: var(--accent);
+}
+
+/* small responsive reductions */
+@media (max-width: 720px) {
+    .grid.compact-grid { grid-template-columns: 1fr; gap:10px; }
+    .right-col { order: 2; }
+    .left-col { order: 1; }
+    .avatar { width: 44px; height: 44px; font-size:0.9rem; }
+}
+
+/* final tiny tweaks for very small viewports */
+@media (max-width: 420px) {
+    .panel-card { padding: 6px; }
+    .profile-meta h1 { font-size: 0.96rem; }
+    .order-link { font-size: 0.86rem; }
+    .form-card .btn { font-size: 0.84rem; padding: .4rem .5rem; }
+}
+
+/* Motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 10ms !important; animation-duration: 10ms !important; }
+}
+
+/* -------------------------
+   Profile-page specific overrides
+   ------------------------- */
+body.profile-page .site-header,
+body.profile-page header.site-header {
+    height: 56px !important;
+    min-height: 56px !important;
+    padding: 6px 12px !important;
+}
+body.profile-page .site-header .navbar,
+body.profile-page .site-header .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+body.profile-page footer,
+body.profile-page .site-footer {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* tighter profile card to avoid page scrollbar */
+body.profile-page .profile-wrap { padding: 4px; margin-top: 6px; max-width: 880px; }
+body.profile-page .panel-card { padding: 8px; border-radius: 10px; box-shadow: 0 8px 26px rgba(31,38,135,0.05); }
+
+/* reduce vertical repetition */
+body.profile-page .profile-header { gap: 0.4rem; }
+body.profile-page .avatar { width:44px; height:44px; font-size:0.88rem; }
+body.profile-page .profile-meta h1 { font-size: 0.98rem; }
+body.profile-page .profile-meta .muted { font-size: 0.74rem; }
+
+/* tighter grid for profile */
+body.profile-page .grid.compact-grid { grid-template-columns: 1fr 200px; gap: 6px; }
+body.profile-page .right-col .form-card.compact { padding: 6px; }
+
+/* extremely small heights: hide helper text when necessary */
+@media (max-height: 760px) {
+    body.profile-page .panel-card .small-muted,
+    body.profile-page .panel-card .muted { display: none; }
+    body.profile-page .profile-meta .muted { display: block; font-size: 0.72rem; }
+}
+
+/* ensure transformed scaled panel doesn't cause page scroll */
+.profile-wrap[style] { overflow: hidden; }
+
+/* address & support tweaks */
+.address-card .small-muted,
+.support-card .small-muted {
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+.address-card .btn, .support-card .btn {
+    border-radius: 8px;
+}
+
+/* subtle hover for right column cards */
+.right-col .info-card.condensed, .right-col .form-card.compact {
+    transition: box-shadow .12s ease, transform .12s ease;
+}
+.right-col .info-card.condensed:hover, .right-col .form-card.compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(31,38,135,0.06);
+}
+
+/* final safety: reduce top/bottom margins inside panel to help fit */
+.panel-card .mb-0, .panel-card .mb-1, .panel-card .mb-2, .panel-card .mb-3, .panel-card .mb-4 {
+    margin-bottom: 6px !important;
+}
+```// filepath: c:\xampp\htdocs\B2DEV\B2DEV\assets\css\user\profile.css
+:root{
+    --card-radius:12px;
+    --muted:#6c757d;
+    --bg:#f4f7fb;
+    --panel-bg: linear-gradient(180deg, #ffffff, #fbfcff);
+    --accent:#2f6bff;
+    --accent-2:#6c5ce7;
+    --surface: #ffffff;
+    --soft-shadow: 0 12px 36px rgba(31,38,135,0.06);
+    --panel-pad: 8px;
+}
+
+/* Page container compact to fit on a single page */
+html, body {
+    height: 100%;
+    background: var(--bg);
+}
+body {
+    color: #222;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    margin: 0;
+}
+.profile-wrap {
+    max-width: 940px;
+    margin: 6px auto;
+    padding: 6px;
+    display: flex;
+    justify-content: center;
+}
+
+/* Panel */
+.panel-card {
+    width: 100%;
+    border-radius: var(--card-radius);
+    background: var(--panel-bg);
+    box-shadow: var(--soft-shadow);
+    padding: var(--panel-pad);
+    border: 1px solid rgba(30,40,90,0.03);
+    overflow: visible;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+/* compact mode: try to fit viewport */
+.panel-card.compact {
+    padding: 8px;
+    line-height: 1.04;
+    font-size: 0.95rem;
+}
+
+/* tighter header */
+.profile-header {
+    display:flex;
+    gap:0.5rem;
+    align-items:center;
+    margin-bottom:0.28rem;
+    padding: 6px;
+}
+.avatar {
+    width:48px;
+    height:48px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:0.98rem;
+    font-weight:700;
+    color:#fff;
+    background: linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow: 0 8px 24px rgba(31,38,135,0.08);
+    flex-shrink:0;
+}
+.profile-meta h1 { margin:0; font-size:1rem; }
+.profile-meta .muted { color:var(--muted); font-size:.78rem; margin-top:.06rem; }
+
+/* small header actions (icons) */
+.header-actions {
+    margin-left: auto;
+    display:flex;
+    gap:8px;
+}
+.header-actions .btn {
+    width:34px;
+    height:34px;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:8px;
+}
+
+/* Grid: compact two-column (left content, right actions) */
+.grid.compact-grid {
+    display:grid;
+    grid-template-columns: 1fr 210px;
+    gap:10px;
+    align-items:start;
+}
+
+/* Left column condensed */
+.left-col .info-card.condensed {
+    padding:8px;
+    border-radius:10px;
+    background: var(--surface);
+    box-shadow: 0 6px 18px rgba(31,38,135,0.03);
+    border: 1px solid rgba(30,38,90,0.03);
+}
+.info-row { display:flex; justify-content:space-between; gap:8px; padding:6px 6px; border-bottom: 1px dashed rgba(0,0,0,0.03); }
+.info-row:last-child { border-bottom: none; }
+.info-row .label { color:var(--muted); font-size:0.8rem; }
+.info-row .value { font-weight:600; font-size:0.9rem; }
+
+/* Orders compact */
+.compact-orders { margin:0; padding:0; }
+.compact-orders li { padding:6px 0; border-bottom: 1px solid rgba(0,0,0,0.03); list-style:none; }
+.compact-orders li:last-child { border-bottom: none; }
+.order-link { color: var(--accent); font-weight:600; font-size:0.9rem; text-decoration:none; }
+.order-meta { color:var(--muted); font-size:0.8rem; margin-top:2px; }
+
+/* Right column actions */
+.right-col .form-card.compact {
+    padding:8px;
+    border-radius:10px;
+    background: var(--surface);
+    box-shadow: 0 6px 18px rgba(31,38,135,0.03);
+    border: 1px solid rgba(30,38,90,0.03);
+}
+.form-card .btn { border-radius:8px; padding:.42rem .6rem; font-weight:600; font-size:.86rem; }
+
+/* compact alerts */
+.compact-alert { padding:6px; margin-bottom:6px; font-size:0.86rem; }
+
+/* reduce margins to fit on one page */
+.panel-card .info-card { margin-bottom:8px; }
+.compact-seeall { margin-top:6px; }
+
+/* small screens: stack */
+@media (max-width: 900px) {
+    .grid.compact-grid { grid-template-columns: 1fr; }
+    .header-actions { margin-top:8px; }
+}
+
+/* accessibility focus */
+.profile-header:focus, .form-card .btn:focus, .avatar:focus {
+    outline: 3px solid rgba(47,107,255,0.12);
+    outline-offset: 2px;
+}
+
+/* fitting behavior when script scales the panel */
+.profile-wrap { transition: padding 120ms ease; }
+.panel-card { transform-origin: top center; }
+
+/* prevent panel internal scroll unless absolutely necessary */
+.panel-card.compact { max-height: none; overflow: visible; }
+
+/* Visual polish for buttons consistent with other pages */
+.btn-primary {
+    background: linear-gradient(90deg,var(--accent),var(--accent-2));
+    border: none;
+    color: #fff;
+}
+.btn-outline-primary {
+    border: 1px solid rgba(47,107,255,0.12);
+    color: var(--accent);
+}
+
+/* small responsive reductions */
+@media (max-width: 720px) {
+    .grid.compact-grid { grid-template-columns: 1fr; gap:10px; }
+    .right-col { order: 2; }
+    .left-col { order: 1; }
+    .avatar { width: 44px; height: 44px; font-size:0.9rem; }
+}
+
+/* final tiny tweaks for very small viewports */
+@media (max-width: 420px) {
+    .panel-card { padding: 6px; }
+    .profile-meta h1 { font-size: 0.96rem; }
+    .order-link { font-size: 0.86rem; }
+    .form-card .btn { font-size: 0.84rem; padding: .4rem .5rem; }
+}
+
+/* Motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 10ms !important; animation-duration: 10ms !important; }
+}
+
+/* -------------------------
+   Profile-page specific overrides
+   ------------------------- */
+body.profile-page .site-header,
+body.profile-page header.site-header {
+    height: 56px !important;
+    min-height: 56px !important;
+    padding: 6px 12px !important;
+}
+body.profile-page .site-header .navbar,
+body.profile-page .site-header .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+body.profile-page footer,
+body.profile-page .site-footer {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* tighter profile card to avoid page scrollbar */
+body.profile-page .profile-wrap { padding: 4px; margin-top: 6px; max-width: 880px; }
+body.profile-page .panel-card { padding: 8px; border-radius: 10px; box-shadow: 0 8px 26px rgba(31,38,135,0.05); }
+
+/* reduce vertical repetition */
+body.profile-page .profile-header { gap: 0.4rem; }
+body.profile-page .avatar { width:44px; height:44px; font-size:0.88rem; }
+body.profile-page .profile-meta h1 { font-size: 0.98rem; }
+body.profile-page .profile-meta .muted { font-size: 0.74rem; }
+
+/* tighter grid for profile */
+body.profile-page .grid.compact-grid { grid-template-columns: 1fr 200px; gap: 6px; }
+body.profile-page .right-col .form-card.compact { padding: 6px; }
+
+/* extremely small heights: hide helper text when necessary */
+@media (max-height: 760px) {
+    body.profile-page .panel-card .small-muted,
+    body.profile-page .panel-card .muted { display: none; }
+    body.profile-page .profile-meta .muted { display: block; font-size: 0.72rem; }
+}
+
+/* ensure transformed scaled panel doesn't cause page scroll */
+.profile-wrap[style] { overflow: hidden; }
+
+/* address & support tweaks */
+.address-card .small-muted,
+.support-card .small-muted {
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+.address-card .btn, .support-card .btn {
+    border-radius: 8px;
+}
+
+/* subtle hover for right column cards */
+.right-col .info-card.condensed, .right-col .form-card.compact {
+    transition: box-shadow .12s ease, transform .12s ease;
+}
+.right-col .info-card.condensed:hover, .right-col .form-card.compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(31,38,135,0.06);
+}
+
+/* final safety: reduce top/bottom margins inside panel to help fit */
+.panel-card .mb-0, .panel-card .mb-1, .panel-card .mb-2, .panel-card .mb-3, .panel-card .mb-4 {
+    margin-bottom: 6px !important;
+}

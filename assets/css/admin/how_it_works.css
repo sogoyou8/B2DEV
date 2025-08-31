@@ -1,0 +1,68 @@
+:root{
+    --card-radius:12px;
+    --muted:#6c757d;
+    --bg-gradient-1:#f8fbff;
+    --bg-gradient-2:#eef7ff;
+    --accent:#0d6efd;
+    --accent-2:#6610f2;
+}
+
+/* Page-specific layout & typographic tweaks for how_it_works.php */
+body.admin-page main.container {
+    max-width: 980px;
+}
+
+/* Heading */
+main.container > h2 {
+    display:flex;
+    align-items:center;
+    gap:0.6rem;
+    font-weight:700;
+    color:var(--accent-2);
+    margin-bottom:0.75rem;
+    font-size:1.6rem;
+}
+
+/* Buttons */
+main.container .btn-outline-primary {
+    border-width:1px;
+    padding:0.45rem 0.6rem;
+}
+
+/* Alerts */
+main.container .alert {
+    border-radius:10px;
+    box-shadow:0 6px 18px rgba(3,37,76,0.03);
+    padding:1rem 1.15rem;
+    background: linear-gradient(180deg, #ffffff, #fbfdff);
+    color:#212529;
+}
+
+main.container .alert h4 {
+    margin-top:0;
+    margin-bottom:0.5rem;
+    font-size:1.05rem;
+}
+
+main.container .alert ul {
+    margin-bottom:0;
+}
+
+/* Secondary notice */
+.alert-secondary {
+    background: linear-gradient(180deg,#f7f8fa,#ffffff);
+    border: 1px solid rgba(0,0,0,0.04);
+}
+
+/* Small helper text */
+main.container .small.text-muted,
+main.container .small-muted {
+    color:var(--muted);
+    font-size:0.95rem;
+}
+
+/* Responsive tweaks */
+@media (max-width: 767.98px) {
+    main.container > h2 { font-size:1.25rem; }
+    main.container { padding-left:12px; padding-right:12px; }
+}

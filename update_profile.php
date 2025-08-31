@@ -10,6 +10,9 @@ include 'includes/db.php';
 include 'includes/header.php';
 include 'admin/admin_demo_guard.php';
 
+// helper adresse centralisé
+include_once __DIR__ . '/includes/address.php';
+
 $user_id = $_SESSION['user_id'];
 
 $errors = [];
@@ -25,6 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
 
+    // address fields (optional)
+    $billing_address = trim((string)($_POST['billing_address'] ?? ''));
+    $city = trim((string)($_POST['city'] ?? ''));
+    $postal_code = trim((string)($_POST['postal_code'] ?? ''));
+    $save_address = isset($_POST['save_address']) && ($_POST['save_address'] == '1' || $_POST['save_address'] === 'on') ? 1 : 0;
+
     // Validation des données
     if (empty($name)) {
         $errors[] = "Le nom est requis.";
@@ -33,14 +42,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $errors[] = "Un email valide est requis.";
     }
 
+    // adresse : si un des champs est renseigné, valider minimalement
+    if ($billing_address !== '' || $city !== '' || $postal_code !== '') {
+        if ($billing_address === '') $errors[] = "Adresse de facturation requise si vous souhaitez l'enregistrer.";
+        if ($city === '') $errors[] = "Ville requise si vous souhaitez l'enregistrer.";
+        if ($postal_code === '') $errors[] = "Code postal requis si vous souhaitez l'enregistrer.";
+    }
+
     if (empty($errors)) {
         try {
+            // Mettre à jour nom/email dans users
             $query = $pdo->prepare("UPDATE users SET name = ?, email = ? WHERE id = ?");
             $query->execute([$name, $email, $user_id]);
+
+            // Sauvegarder l'adresse avec le helper (gère l'absence de colonnes)
+            // Si tous les champs d'adresse vides et save_address=0 => ne rien faire
+            if ($billing_address !== '' || $city !== '' || $postal_code !== '' || $save_address) {
+                // saveUserAddress vérifie l'existence des colonnes et effectue UPDATE
+                saveUserAddress($pdo, (int)$user_id, $billing_address, $city, $postal_code, (int)$save_address);
+            }
+
             $success = "Votre profil a été mis à jour avec succès.";
             // mettre à jour la session si besoin
             $_SESSION['user_name'] = $name;
             $_SESSION['user_email'] = $email;
+
+            // recharger les données utilisateur pour affichage (PRG non utilisé ici)
+            try {
+                $q = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+                $q->execute([$user_id]);
+                $user = $q->fetch(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                // ignore
+            }
+
         } catch (Exception $e) {
             $errors[] = "Erreur lors de la mise à jour : " . $e->getMessage();
         }
@@ -53,34 +88,13 @@ try {
     $query->execute([$user_id]);
     $user = $query->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    $user = ['name' => '', 'email' => ''];
+    $user = ['name' => '', 'email' => '', 'billing_address' => '', 'city' => '', 'postal_code' => ''];
     $errors[] = "Impossible de charger les informations utilisateur.";
 }
-?>
-<style>
-/* Simple visual enhancements for update_profile.php */
-.profile-container { max-width: 720px; margin: 28px auto; padding: 0 16px; }
-.profile-card { background:#fff; padding:22px; border-radius:12px; box-shadow:0 8px 22px rgba(15,23,42,0.04); }
-.profile-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
-.profile-title { font-size:1.25rem; font-weight:700; margin:0; }
-.small-muted { color:#6b7280; font-size:0.95rem; }
-.form-row { margin-bottom:12px; }
-.form-row label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
-.form-control { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:0.95rem; }
-.form-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
-.btn { padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; border:1px solid transparent; }
-.btn-primary { background:#2563eb; color:#fff; }
-.btn-outline { background:transparent; color:#2563eb; border:1px solid #cfe0ff; }
-.btn-ghost { background:#f8fafc; color:#0f172a; border:1px solid #e6eefc; }
-.btn-danger { background:#ef4444; color:#fff; }
-.alert-success { background:#ecfdf5; color:#065f46; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #bbf7d0; }
-.alert-error { background:#fff1f2; color:#991b1b; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #fecaca; }
-.preview-card { background:#f8fafc; padding:12px; border-radius:8px; margin-top:12px; font-size:0.95rem; color:#0f172a; }
-@media (max-width:640px) {
-    .profile-container { padding: 0 12px; }
-}
-</style>
 
+// Charger la feuille de styles dédiée
+echo '<link rel="stylesheet" href="assets/css/user/update_profile.css">' ;
+?>
 <main class="profile-container" role="main" aria-labelledby="updateProfileTitle">
     <section class="profile-card" aria-labelledby="updateProfileTitle">
         <div class="profile-header">
@@ -116,14 +130,52 @@ try {
                 <input type="email" name="email" id="email" class="form-control" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>" required>
             </div>
 
-            <div class="form-actions" role="group" aria-label="Actions du formulaire">
+            <hr style="margin:12px 0;border:none;border-top:1px solid #eee;">
+
+            <h5 class="mb-2">Adresse de facturation (optionnel)</h5>
+
+            <div class="form-row">
+                <label for="billing_address">Adresse :</label>
+                <input type="text" name="billing_address" id="billing_address" class="form-control" value="<?php echo htmlspecialchars($user['billing_address'] ?? ''); ?>">
+            </div>
+
+            <div class="form-grid" style="display:grid;grid-template-columns:1fr 160px;gap:8px;">
+                <div class="form-row">
+                    <label for="city">Ville :</label>
+                    <input type="text" name="city" id="city" class="form-control" value="<?php echo htmlspecialchars($user['city'] ?? ''); ?>">
+                </div>
+                <div class="form-row">
+                    <label for="postal_code">Code postal :</label>
+                    <input type="text" name="postal_code" id="postal_code" class="form-control" pattern="^[0-9A-Za-z \-]{2,10}$" value="<?php echo htmlspecialchars($user['postal_code'] ?? ''); ?>">
+                </div>
+            </div>
+
+            <div class="form-check" style="margin-top:12px;">
+                <?php $saved = !empty($user['save_address_default']) ? true : false; ?>
+                <input type="checkbox" name="save_address" id="save_address" value="1" <?php echo $saved ? 'checked' : ''; ?>>
+                <label for="save_address">Enregistrer comme adresse par défaut</label>
+            </div>
+
+            <div class="form-actions" role="group" aria-label="Actions du formulaire" style="margin-top:14px;">
                 <button type="submit" class="btn btn-primary">Enregistrer</button>
             </div>
 
-            <div id="livePreview" class="preview-card" aria-live="polite">
+            <div id="livePreview" class="preview-card" aria-live="polite" style="margin-top:12px;">
                 <div><strong>Prévisualisation :</strong></div>
                 <div style="margin-top:6px;"><strong>Nom :</strong> <span id="previewName"><?php echo htmlspecialchars($user['name'] ?? '—'); ?></span></div>
                 <div style="margin-top:4px;"><strong>Email :</strong> <span id="previewEmail"><?php echo htmlspecialchars($user['email'] ?? '—'); ?></span></div>
+                <?php if (!empty($user['billing_address']) || !empty($user['city']) || !empty($user['postal_code'])): ?>
+                    <div style="margin-top:8px;"><strong>Adresse :</strong><br>
+                        <?php
+                            $addr = [
+                                'billing_address' => $user['billing_address'] ?? '',
+                                'city' => $user['city'] ?? '',
+                                'postal_code' => $user['postal_code'] ?? ''
+                            ];
+                            echo formatAddressForDisplay($addr);
+                        ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </form>
     </section>
@@ -175,7 +227,7 @@ try {
         }
         if (localErrors.length) {
             e.preventDefault();
-            alert(localErrors.join('\n'));
+            alert(localErrors.join('\\n'));
         }
     }, false);
 })();

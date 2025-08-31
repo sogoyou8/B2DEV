@@ -9,6 +9,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 
 include_once 'admin_demo_guard.php';
 include_once '../includes/db.php';
+include_once '../includes/classes/Product.php';
 include_once 'includes/header.php';
 
 // CSRF token
@@ -70,7 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validate products exist and stock availability
     if (empty($errors)) {
+        $startedTx = false;
         try {
+            // START TRANSACTION before SELECT ... FOR UPDATE so the locking works
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $startedTx = true;
+            }
+
             $placeholders = implode(',', array_fill(0, count($lines), '?'));
             $ids = array_map(function($l){ return $l['product_id']; }, $lines);
             $stmt = $pdo->prepare("SELECT id, price, stock, stock_alert_threshold, name FROM items WHERE id IN ($placeholders) FOR UPDATE");
@@ -91,15 +99,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $errors[] = "Stock insuffisant pour '{$byId[$pid]['name']}' (ID $pid). Stock disponible : {$byId[$pid]['stock']}, demandé : $qty.";
                 }
             }
+
+            // If validation failed, rollback to release locks
+            if (!empty($errors) && $startedTx && $pdo->inTransaction()) {
+                $pdo->rollBack();
+                $startedTx = false;
+            }
+
         } catch (Exception $e) {
+            if ($startedTx && $pdo->inTransaction()) $pdo->rollBack();
             $errors[] = "Erreur base de données : " . $e->getMessage();
+            $startedTx = false;
         }
     }
 
     if (empty($errors)) {
         // Compute total and persist within transaction
         try {
-            $pdo->beginTransaction();
+            // Ensure we are in a transaction. If validation opened it, we keep it.
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+            }
 
             // compute total using fresh prices
             $total = 0.0;
@@ -115,30 +135,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ins->execute([$user_id, round($total,2), $status]);
             $order_id = $pdo->lastInsertId();
 
-            // Insert order details and decrement stock
+            // Insert order details and decrement stock via Product wrapper
             $detailStmt = $pdo->prepare("INSERT INTO order_details (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)");
-            $updateStockStmt = $pdo->prepare("UPDATE items SET stock = stock - ? WHERE id = ?");
-            // Use three placeholders for notifications
-            $notifStmt = $pdo->prepare("INSERT INTO notifications (`type`, `message`, `is_persistent`) VALUES (?, ?, ?)");
 
             foreach ($lines as $l) {
                 $pid = $l['product_id'];
                 $qty = $l['quantity'];
                 $price = floatval($byId[$pid]['price']);
 
+                // Insert order detail snapshot
                 $detailStmt->execute([$order_id, $pid, $qty, $price]);
-                $updateStockStmt->execute([$qty, $pid]);
 
-                // Check new stock level
-                $stmtCheck = $pdo->prepare("SELECT stock, stock_alert_threshold, name FROM items WHERE id = ?");
-                $stmtCheck->execute([$pid]);
-                $row = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-                if ($row) {
-                    if (intval($row['stock']) <= intval($row['stock_alert_threshold'])) {
-                        $msg = "Le produit '{$row['name']}' (ID $pid) est en stock faible ({$row['stock']} restant, seuil {$row['stock_alert_threshold']}).";
-                        $notifStmt->execute(['important', $msg, 1]);
-                    }
+                // Decrement stock via Product::decrementStock to centralize locking, notifications and logs.
+                $product = new Product($pdo, $pid);
+                $adminId = $_SESSION['admin_id'] ?? null;
+                $decremented = $product->decrementStock($qty, $adminId);
+                if (!$decremented) {
+                    // If decrement fails, rollback and throw to outer catch to set error
+                    throw new Exception("Stock insuffisant ou erreur lors de la mise à jour du stock pour '{$byId[$pid]['name']}' (ID $pid).");
                 }
+
+                // Product::decrementStock handles notifications and logging
             }
 
             // Notification non-persistante d'action admin
@@ -156,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } catch (Exception $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $errors[] = "Erreur lors de la création de la commande : " . $e->getMessage();
         }
     }
@@ -193,138 +210,8 @@ if (!empty($_SESSION['old_order'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Shared admin styling (par défaut utilisé sur list_* pages) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/assets/css/admin.css">
-<style>
-    :root{
-        --card-radius:12px;
-        --muted:#6c757d;
-        --bg-gradient-1:#f8fbff;
-        --bg-gradient-2:#eef7ff;
-        --accent:#0d6efd;
-        --accent-2:#6610f2;
-        --panel-padding:1.25rem;
-    }
-
-    /* Page background / admin look */
-    body.admin-page {
-        background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
-        -webkit-font-smoothing:antialiased;
-        -moz-osx-font-smoothing:grayscale;
-    }
-
-    /* Panel / card harmonisation */
-    .panel-card {
-        border-radius: var(--card-radius);
-        background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
-        box-shadow: 0 12px 36px rgba(3,37,76,0.06);
-        padding: var(--panel-padding);
-    }
-
-    .page-title h2 {
-        margin:0;
-        font-weight:700;
-        color:var(--accent-2);
-        background: linear-gradient(90deg, var(--accent), var(--accent-2));
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    .help-note { color:var(--muted); font-size:.95rem; }
-
-    .btn-round { border-radius:8px; }
-
-    .form-card { border-radius:12px; }
-
-    .line-row {
-        display:flex;
-        gap:.75rem;
-        align-items:center;
-        margin-bottom:.5rem;
-        width:100%;
-    }
-
-    .line-row label { margin:0; display:block; width:100%; }
-
-    .line-row select,
-    .line-row input[type="number"],
-    .line-row .form-select,
-    .line-row .form-control {
-        min-width:160px;
-        max-width:100%;
-        width:100%;
-        box-sizing:border-box;
-        padding:.5rem .6rem;
-        border:1px solid #e9ecef;
-        border-radius:8px;
-        background:#fff;
-        transition:box-shadow .15s ease, border-color .15s ease;
-    }
-
-    .line-row select:focus,
-    .line-row input[type="number"]:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 0.15rem rgba(13,110,253,0.12);
-    }
-
-    /* remove-line button */
-    .remove-line {
-        border-radius:8px;
-        min-width:38px;
-        height:38px;
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        padding:0 .5rem;
-    }
-
-    .remove-line[disabled] {
-        opacity:.6; pointer-events:none;
-    }
-
-    /* Right preview card */
-    .preview-card {
-        border-radius:10px;
-        background:#fff;
-        box-shadow:0 4px 12px rgba(3,37,76,0.04);
-        padding:1rem;
-    }
-
-    .preview-card h6 { margin-top:0; margin-bottom:.5rem; }
-
-    .preview-lines { list-style: none; padding-left:0; margin:0; }
-    .preview-lines li { margin-bottom:.35rem; color:#444; }
-
-    /* Form controls parity */
-    .form-select, .form-control {
-        border-radius:10px;
-        border:1px solid #e9ecef;
-        transition: all .2s ease;
-    }
-
-    .form-select:focus, .form-control:focus {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 .15rem rgba(13,110,253,0.08);
-    }
-
-    /* Small helpers */
-    .small-help { font-size:.9rem; color:var(--muted); }
-
-    /* Mobile: stack fields for lines */
-    @media (max-width: 992px) {
-        .line-row { flex-direction:column; align-items:stretch; gap:.5rem; }
-        .line-row > div { width:100% !important; }
-        .remove-line { align-self:flex-end; }
-    }
-
-    /* Tiny accessibility improvements */
-    .line-row select:invalid { color: #6c757d; }
-
-    /* Ensure table-like spacing for main form */
-    .form-card .card-body { padding:1rem; }
-
-</style>
+    <!-- Use relative paths (../assets/...) so files resolve when project is served from a subfolder -->
+    <link rel="stylesheet" href="../assets/css/admin/add_order.css">
 </head>
 <body class="admin-page">
 <main class="container py-4">
@@ -343,7 +230,7 @@ if (!empty($_SESSION['old_order'])) {
 
         <?php if (!empty($_SESSION['errors'])): ?>
             <div class="alert alert-danger">
-                <ul class="mb-0">
+                <ul>
                     <?php foreach ($_SESSION['errors'] as $e): ?>
                         <li><?php echo htmlspecialchars($e); ?></li>
                     <?php endforeach; ?>
@@ -552,3 +439,4 @@ if (!empty($_SESSION['old_order'])) {
 <?php include 'includes/footer.php'; ?>
 <?php ob_end_flush(); ?>
 </body>
+</html>

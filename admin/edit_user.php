@@ -131,25 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 <script>try { document.body.classList.add('admin-page'); } catch(e){}</script>
 
-<style>
-:root{
-    --card-radius:12px;
-    --muted:#6c757d;
-    --bg-gradient-1:#f8fbff;
-    --bg-gradient-2:#eef7ff;
-    --accent:#0d6efd;
-    --accent-2:#6610f2;
-}
-body.admin-page { background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2)); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
-.panel-card { border-radius: var(--card-radius); background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff); box-shadow: 0 12px 36px rgba(3,37,76,0.06); padding: 1.25rem; }
-.page-title { display:flex; gap:1rem; align-items:center; }
-.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
-.controls { display:flex; gap:.5rem; align-items:center; }
-.btn-round { border-radius:8px; }
-.help-note { color:var(--muted); font-size:.95rem; }
-.form-card { border-radius:12px; }
-.info-box { background:#fff; border-radius:8px; padding:0.75rem; box-shadow:0 6px 18px rgba(3,37,76,0.02); }
-</style>
+<link rel="stylesheet" href="../assets/css/admin/edit_user.css">
 
 <main class="container py-4">
     <section class="panel-card mb-4">

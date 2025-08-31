@@ -8,6 +8,7 @@ $page = $_GET['page'] ?? 'prediction';
 // Détermination du retour
 $back_url = $_SERVER['HTTP_REFERER'] ?? 'prediction.php';
 ?>
+<link rel="stylesheet" href="../assets/css/admin/how_it_works.css">
 
 <main class="container py-4">
     <h2><i class="bi bi-info-circle me-2"></i>Comment ça marche ?</h2>

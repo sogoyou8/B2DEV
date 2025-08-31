@@ -1,0 +1,329 @@
+/* About - Version épurée et professionnelle */
+
+/* Variables (fallback) */
+:root{
+  --navbar-height: 80px;
+  --bg-gradient: linear-gradient(135deg, #0b0d10 0%, #131418 50%, #24272b 100%);
+  --text-primary: #E6EEF6;
+  --text-muted: #9CA3AF;
+  --primary: #6366f1;
+  --primary-2: #8b5cf6;
+  --accent: #60a5fa;
+  --panel: rgba(255,255,255,0.04);
+  --panel-border: 1px solid rgba(255,255,255,0.08);
+  --panel-shadow: 0 10px 30px rgba(0,0,0,.35);
+  --panel-hover: rgba(255,255,255,0.06);
+  --radius: 14px;
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Appliquer le thème sombre cohérent */
+body.about-page{
+  background: var(--bg-gradient);
+  color: var(--text-primary);
+}
+
+/* Zone principale: hauteur = viewport - navbar, pas de débordement */
+.about-main{
+  height: calc(100vh - var(--navbar-height));
+  display: grid;
+  place-items: center;
+  padding: 12px 0;
+  overflow: hidden;
+}
+
+/* Conteneur interne plein hauteur */
+.about-container{
+  width: min(1100px, 94%);
+  height: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+}
+
+/* En-tête compact avec effet de verre */
+.about-header{
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  color: #fff;
+  border-radius: var(--radius);
+  padding: clamp(16px, 3vw, 20px) 18px;
+  box-shadow: var(--panel-shadow);
+  border: 1px solid rgba(255,255,255,0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.about-header::before{
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shine 3s ease-in-out infinite;
+}
+
+@keyframes shine {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+.hero-title{
+  margin: 0 0 4px;
+  font-size: clamp(22px, 3.6vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.hero-subtitle{
+  margin: 0;
+  font-size: clamp(13px, 2vw, 15px);
+  opacity: .96;
+}
+
+/* Grille 2 colonnes responsive */
+.about-layout{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* Cartes avec effet de verre amélioré */
+.about-card{
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius);
+  border: var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  padding: clamp(16px, 3vw, 20px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.about-card::before{
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--primary-2), var(--accent));
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.about-card:hover{
+  background: var(--panel-hover);
+  border-color: rgba(255,255,255,0.15);
+  transform: translateY(-2px);
+}
+
+.about-card:hover::before{
+  opacity: 1;
+}
+
+.section-title{
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-size: clamp(16px, 2.6vw, 20px);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title i{
+  color: var(--accent);
+  font-size: 0.9em;
+}
+
+/* Équipe avec animations */
+.team-grid{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.team-member{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 12px;
+  transition: var(--transition);
+  position: relative;
+}
+
+.team-member:hover{
+  transform: translateX(4px);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.avatar{
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  flex: 0 0 42px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.avatar::after{
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: linear-gradient(45deg, var(--primary), var(--accent), var(--primary-2));
+  z-index: -1;
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.team-member:hover .avatar::after{
+  opacity: 0.7;
+}
+
+.member-info{
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.member-name{
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.member-role{
+  margin: 0;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.member-email{
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 11px;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+}
+
+.member-email:hover{
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Mission épurée */
+.mission-content{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.mission-text{
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.mission-text:first-child{
+  margin-bottom: 8px;
+}
+
+/* Responsive: mobile */
+@media (max-width: 900px){
+  body.about-page { overflow-y: auto; }
+  .about-main{ 
+    height: auto; 
+    min-height: calc(100vh - var(--navbar-height)); 
+    padding: 16px 0;
+  }
+  .about-layout{ 
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Très petits écrans */
+@media (max-width: 520px){
+  .hero-title{ font-size: 18px; }
+  .section-title{ font-size: 16px; }
+  .about-card{ padding: 12px; }
+}
+
+/* Animation d'entrée */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.about-card {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.about-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.team-member {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.team-member:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.member-portfolio{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color 0.18s var(--transition), transform 0.18s var(--transition);
+}
+
+.member-portfolio i {
+  font-size: 0.95em;
+  color: currentColor;
+}
+
+.member-portfolio:hover{
+  color: var(--primary-2);
+  transform: translateX(3px);
+  text-decoration: none;
+}

@@ -12,6 +12,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 }
 
 include '../../includes/db.php';
+require_once '../../includes/classes/Product.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -50,7 +51,7 @@ try {
             break;
             
         case 'PUT':
-            // Mettre à jour le stock d'un produit
+            // Mettre à jour le stock d'un produit via la couche Product pour logging/notifications
             $input = json_decode(file_get_contents('php://input'), true);
             $id = $input['id'] ?? null;
             $stock = $input['stock'] ?? null;
@@ -60,23 +61,18 @@ try {
                 echo json_encode(['error' => 'Données manquantes']);
                 exit;
             }
-            
-            $stmt = $pdo->prepare("UPDATE items SET stock = ? WHERE id = ?");
-            $success = $stmt->execute([$stock, $id]);
-            
-            // Créer une notification si stock critique
-            if ($stock == 0) {
-                $productQuery = $pdo->prepare("SELECT name FROM items WHERE id = ?");
-                $productQuery->execute([$id]);
-                $product = $productQuery->fetch();
-                
-                $notifStmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, 1)");
-                $notifStmt->execute([
-                    'important',
-                    "Le produit '{$product['name']}' est en rupture de stock !"
-                ]);
+
+            // Charger et utiliser Product::updateStock pour centraliser notifications/log
+            $product = new Product($pdo, $id);
+            if (!$product->getId()) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Produit introuvable']);
+                exit;
             }
-            
+
+            $adminId = $_SESSION['admin_id'] ?? null;
+            $success = $product->updateStock(intval($stock), $adminId);
+
             echo json_encode([
                 'success' => $success,
                 'message' => $success ? 'Stock mis à jour' : 'Erreur lors de la mise à jour'

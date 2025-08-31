@@ -149,34 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modifier une commande - #<?php echo (int)$order['id']; ?></title>
-    <style>
-        :root{
-            --card-radius:12px;
-            --muted:#6c757d;
-            --bg-gradient-1:#f8fbff;
-            --bg-gradient-2:#eef7ff;
-            --accent:#0d6efd;
-            --accent-2:#6610f2;
-        }
-        body.admin-page {
-            background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
-        }
-        .panel-card {
-            border-radius: var(--card-radius);
-            background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
-            box-shadow: 0 12px 36px rgba(3,37,76,0.06);
-            padding: 1.25rem;
-        }
-        .page-title { display:flex; gap:1rem; align-items:center; }
-        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
-        .small-muted { color:#6c757d; font-size:0.9rem; }
-        .thumb { width:64px; height:64px; object-fit:cover; border-radius:8px; }
-        .order-table td .item-info { display:flex; gap:12px; align-items:center; }
-        .badge-status { border-radius:8px; padding:.35em .6em; font-size:.9rem; }
-        .controls { display:flex; gap:.5rem; align-items:center; }
-        .btn-round { border-radius:8px; }
-        .preview-card { border-radius:10px; background:#fff; padding:1rem; box-shadow:0 6px 18px rgba(3,37,76,0.03); }
-    </style>
+    <link rel="stylesheet" href="../assets/css/admin/edit_order.css">
 </head>
 <body class="admin-page">
 <main class="container py-4">

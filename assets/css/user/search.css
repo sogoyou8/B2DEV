@@ -1,0 +1,21 @@
+/* Scoper la règle pour n'affecter que les images dans la section de recherche */
+.search-results-section .card-img-top {
+    height: 200px;
+    object-fit: cover;
+    display: block;
+    border-radius: 6px 6px 0 0;
+    background: #fff;
+}
+
+/* Ajustement responsive */
+@media (max-width: 768px) {
+    .search-results-section .card-img-top {
+        height: 160px;
+    }
+}
+
+@media (max-width: 480px) {
+    .search-results-section .card-img-top {
+        height: 120px;
+    }
+}

@@ -59,6 +59,7 @@ $stats = [
 ?>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+<link rel="stylesheet" href="../assets/css/admin/notifications.css">
 
 <main class="container py-4">
     <div class="row">
@@ -352,85 +353,6 @@ $stats = [
         </div>
     </div>
 </main>
-
-<!-- === CSS POUR ANIMATIONS === -->
-<style>
-.notification-card {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.notification-card.hidden {
-    opacity: 0;
-    transform: translateY(-20px);
-    pointer-events: none;
-}
-
-.filter-btn {
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-.filter-btn.active {
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-.filter-btn:hover:not(.active) {
-    transform: scale(1.02);
-}
-
-.mark-as-read {
-    transition: all 0.2s ease;
-}
-
-.mark-as-read:hover {
-    transform: scale(1.05);
-}
-
-.list-group-item {
-    transition: all 0.3s ease;
-}
-
-.list-group-item.removing {
-    opacity: 0;
-    transform: translateX(20px);
-    background-color: #f8f9fa;
-}
-
-/* Effet de pulse pour les alertes critiques */
-.border-danger {
-    animation: pulse-danger 2s infinite;
-}
-
-@keyframes pulse-danger {
-    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-}
-
-/* Badges avec animations */
-.badge {
-    transition: all 0.2s ease;
-}
-
-.card-header .badge:hover {
-    transform: scale(1.1);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .filter-btn {
-        font-size: 0.8rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .card-header {
-        font-size: 0.9rem;
-    }
-}
-</style>
 
 <!-- === JAVASCRIPT POUR FILTRES ET INTERACTIONS === -->
 <script>

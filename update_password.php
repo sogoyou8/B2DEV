@@ -45,17 +45,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($current_password === '') {
         $errors[] = "Le mot de passe actuel est requis.";
     }
+
     if ($new_password === '') {
         $errors[] = "Le nouveau mot de passe est requis.";
     }
+
     if ($confirm_password === '') {
         $errors[] = "La confirmation du nouveau mot de passe est requise.";
     }
+
+    // Vérifier correspondance des mots de passe (si fournis)
     if ($new_password !== '' && $confirm_password !== '' && $new_password !== $confirm_password) {
         $errors[] = "Les nouveaux mots de passe ne correspondent pas.";
     }
-    if ($new_password !== '' && strlen($new_password) < 8) {
-        $errors[] = "Le nouveau mot de passe doit contenir au moins 8 caractères.";
+
+    /*
+     * Appliquer les mêmes règles de complexité que register.php / admin/reset_user_password.php :
+     * - au moins 8 caractères
+     * - au moins une majuscule
+     * - au moins une minuscule
+     * - au moins un caractère spécial (ou underscore)
+     */
+    if ($new_password !== '') {
+        if (strlen($new_password) < 8) {
+            $errors[] = "Le nouveau mot de passe doit contenir au moins 8 caractères.";
+        } else {
+            if (!preg_match('/[A-Z]/', $new_password)) {
+                $errors[] = "Le mot de passe doit contenir au moins une majuscule.";
+            }
+            if (!preg_match('/[a-z]/', $new_password)) {
+                $errors[] = "Le mot de passe doit contenir au moins une minuscule.";
+            }
+            if (!preg_match('/[\W_]/', $new_password)) {
+                $errors[] = "Le mot de passe doit contenir au moins un caractère spécial.";
+            }
+        }
     }
 
     if (empty($errors)) {
@@ -96,31 +120,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
  * Inclure le header maintenant que tout traitement POST/redirect possible est fait.
  */
 include 'includes/header.php';
-?>
-<style>
-/* Amélioration visuelle pour update_password.php */
-.update-password-wrapper { max-width: 640px; margin: 28px auto; padding: 0 16px; }
-.card { background:#ffffff; padding:22px; border-radius:12px; box-shadow:0 8px 20px rgba(20,20,50,0.04); }
-.header-row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
-.title { font-size:1.25rem; font-weight:700; margin:0; }
-.subtitle { color:#6b7280; font-size:0.95rem; margin-top:4px; }
-.form-group { margin-bottom:14px; }
-.form-group label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
-.form-control { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:0.95rem; box-sizing:border-box; }
-.actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
-.btn { padding:10px 16px; border-radius:8px; font-weight:600; cursor:pointer; border:1px solid transparent; }
-.btn-primary { background:#2563eb; color:#fff; border-color:transparent; }
-.btn-outline { background:transparent; color:#2563eb; border:1px solid #cfe0ff; }
-.btn-ghost { background:#f8fafc; color:#0f172a; border:1px solid #e6eefc; }
-.btn-danger { background:#ef4444; color:#fff; border-color:transparent; }
-.alert-success { background:#ecfdf5; color:#065f46; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #bbf7d0; }
-.alert-error { background:#fff1f2; color:#991b1b; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #fecaca; }
-.hint { color:#6b7280; font-size:0.9rem; margin-top:6px; }
-.pw-strength { height:8px; border-radius:6px; background:#e6eefc; margin-top:8px; overflow:hidden; }
-.pw-strength > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#f97316,#10b981); transition:width .25s ease; }
-@media (max-width:640px){ .update-password-wrapper { padding:0 12px; } }
-</style>
 
+// charger le fichier CSS séparé au lieu du style inline
+echo '<link rel="stylesheet" href="assets/css/user/update_password.css">' ;
+?>
 <main class="update-password-wrapper" role="main" aria-labelledby="updatePasswordTitle">
     <section class="card" aria-labelledby="updatePasswordTitle">
         <div class="header-row">
@@ -134,15 +137,22 @@ include 'includes/header.php';
         </div>
 
         <?php if (!empty($errors)): ?>
-            <div class="alert-error" role="alert">
-                <?php foreach ($errors as $error): ?>
-                    <div><?php echo htmlspecialchars($error); ?></div>
-                <?php endforeach; ?>
+            <div class="alert alert-danger">
+                <ul class="mb-0">
+                    <?php foreach ($errors as $error): ?>
+                        <li><?php echo htmlspecialchars($error); ?></li>
+                    <?php endforeach; ?>
+                </ul>
             </div>
         <?php endif; ?>
 
+        <!-- Conteneur pour erreurs côté client (JS) : même apparence que register.php -->
+        <div id="clientErrors" class="alert alert-danger" style="display:none;">
+            <ul class="mb-0" id="clientErrorsList"></ul>
+        </div>
+
         <?php if (!empty($_SESSION['profile_update_success'])): ?>
-            <div class="alert-success" role="status"><?php echo htmlspecialchars($_SESSION['profile_update_success']); unset($_SESSION['profile_update_success']); ?></div>
+            <div class="alert alert-success" role="status"><?php echo htmlspecialchars($_SESSION['profile_update_success']); unset($_SESSION['profile_update_success']); ?></div>
         <?php endif; ?>
 
         <form id="updatePasswordForm" action="update_password.php" method="post" novalidate autocomplete="off">
@@ -154,7 +164,7 @@ include 'includes/header.php';
             <div class="form-group">
                 <label for="new_password">Nouveau mot de passe :</label>
                 <input type="password" name="new_password" id="new_password" class="form-control" required autocomplete="new-password" minlength="8">
-                <div class="hint">Au moins 8 caractères. Inclure majuscule/minuscule et caractère spécial recommandé.</div>
+                <div class="hint">Au moins 8 caractères. Inclure majuscule/minuscule et caractère spécial.</div>
                 <div class="pw-strength" aria-hidden="true"><i id="pwBar" style="width:0%"></i></div>
             </div>
 
@@ -175,9 +185,9 @@ include 'includes/header.php';
     var form = document.getElementById('updatePasswordForm');
     var newPw = document.getElementById('new_password');
     var confirmPw = document.getElementById('confirm_password');
-    var cancelBtn = document.getElementById('cancelBtn');
     var pwBar = document.getElementById('pwBar');
-    var isDirty = false;
+    var clientErrorsEl = document.getElementById('clientErrors');
+    var clientErrorsList = document.getElementById('clientErrorsList');
 
     function scorePassword(pw) {
         var score = 0;
@@ -199,40 +209,57 @@ include 'includes/header.php';
         else pwBar.style.background = 'linear-gradient(90deg,#f97316,#10b981)';
     }
 
+    function showClientErrors(errors) {
+        if (!clientErrorsEl || !clientErrorsList) return;
+        clientErrorsList.innerHTML = '';
+        errors.forEach(function(err){
+            var li = document.createElement('li');
+            li.textContent = err;
+            clientErrorsList.appendChild(li);
+        });
+        clientErrorsEl.style.display = 'block';
+        // Scroller vers le conteneur d'erreurs pour visibilité
+        try { clientErrorsEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+    }
+
+    function clearClientErrors() {
+        if (!clientErrorsEl || !clientErrorsList) return;
+        clientErrorsList.innerHTML = '';
+        clientErrorsEl.style.display = 'none';
+    }
+
     if (newPw) {
         newPw.addEventListener('input', function(){
-            isDirty = true;
             updateStrength();
+            clearClientErrors();
         }, false);
     }
     if (confirmPw) {
-        confirmPw.addEventListener('input', function(){ isDirty = true; }, false);
+        confirmPw.addEventListener('input', function(){ clearClientErrors(); }, false);
     }
     if (form) {
         form.addEventListener('submit', function(e){
             var localErrors = [];
             if (!document.getElementById('current_password').value.trim()) localErrors.push('Le mot de passe actuel est requis.');
             var npw = newPw.value.trim();
+            var cpw = confirmPw.value.trim();
             if (!npw) localErrors.push('Le nouveau mot de passe est requis.');
+            if (!cpw) localErrors.push('La confirmation du mot de passe est requise.');
             if (npw && npw.length < 8) localErrors.push('Le nouveau mot de passe doit contenir au moins 8 caractères.');
-            if (npw !== confirmPw.value.trim()) localErrors.push('Les nouveaux mots de passe ne correspondent pas.');
+            if (npw && !/[A-Z]/.test(npw)) localErrors.push('Le mot de passe doit contenir au moins une majuscule.');
+            if (npw && !/[a-z]/.test(npw)) localErrors.push('Le mot de passe doit contenir au moins une minuscule.');
+            if (npw && !/[\W_]/.test(npw)) localErrors.push('Le mot de passe doit contenir au moins un caractère spécial.');
+            if (npw && cpw && npw !== cpw) localErrors.push('Les nouveaux mots de passe ne correspondent pas.');
+
             if (localErrors.length) {
                 e.preventDefault();
-                alert(localErrors.join('\\n'));
+                showClientErrors(localErrors);
                 return false;
             }
+            // laisser le submit se faire pour envoi au serveur
             return true;
         }, false);
     }
-
-    cancelBtn && cancelBtn.addEventListener('click', function(){
-        if (isDirty) {
-            if (!confirm('Vous avez des modifications non enregistrées. Voulez-vous annuler et revenir au profil ?')) {
-                return;
-            }
-        }
-        window.location.href = 'profile.php';
-    }, false);
 
     // initial strength update (in case browser autofill)
     updateStrength();

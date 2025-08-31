@@ -3,6 +3,9 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
+// Inclure la connexion DB pour les compteurs
+include_once __DIR__ . '/db.php';
+
 // Déterminer état de session / rôle admin (valeurs provenant des pages qui incluent ce header)
 $isLoggedIn = !empty($_SESSION['user_id']) || !empty($_SESSION['admin_logged_in']);
 $adminRole = !empty($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'];
@@ -10,6 +13,38 @@ $adminRole = !empty($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'
 // Par défaut, pas de notifications (les pages admin affichent leur propre header si nécessaire)
 $unreadNotifications = 0;
 $recentNotifications = [];
+
+// Mettre à jour les compteurs panier et favoris automatiquement
+if (!empty($_SESSION['user_id'])) {
+    $user_id = (int)$_SESSION['user_id'];
+    
+    // Compteur panier depuis la DB
+    try {
+        $cartStmt = $pdo->prepare("SELECT SUM(quantity) AS total FROM cart WHERE user_id = ?");
+        $cartStmt->execute([$user_id]);
+        $cartCount = (int)($cartStmt->fetchColumn() ?: 0);
+        $_SESSION['cart_count'] = $cartCount;
+    } catch (Exception $e) {
+        $_SESSION['cart_count'] = 0;
+    }
+    
+    // Compteur favoris depuis la DB
+    try {
+        $favStmt = $pdo->prepare("SELECT COUNT(*) FROM favorites WHERE user_id = ?");
+        $favStmt->execute([$user_id]);
+        $favCount = (int)($favStmt->fetchColumn() ?: 0);
+        $_SESSION['favorites_count'] = $favCount;
+    } catch (Exception $e) {
+        $_SESSION['favorites_count'] = 0;
+    }
+} else {
+    // Utilisateur non connecté : compteurs depuis session temporaire
+    $_SESSION['cart_count'] = isset($_SESSION['temp_cart']) && is_array($_SESSION['temp_cart']) 
+        ? array_sum($_SESSION['temp_cart']) : 0;
+    
+    $_SESSION['favorites_count'] = isset($_SESSION['temp_favorites']) && is_array($_SESSION['temp_favorites']) 
+        ? count($_SESSION['temp_favorites']) : 0;
+}
 
 /**
  * Retourne 'active' si $href est présent dans l'URI courante.
@@ -76,178 +111,9 @@ function assetUrl(string $relativePath): string {
     <!-- Projet - styles globaux -->
     <link rel="stylesheet" href="<?php echo htmlspecialchars(assetUrl('css/style.css')); ?>">
 
-    <!-- Enhanced navbar critical CSS (aesthetic improvements : glassmorphism, smoother spacing, subtle shadows) -->
-    <style>
-    :root{
-        --nav-h: 72px;
-        --nav-bg: rgba(28,30,31,0.72);
-        --nav-blur: 8px;
-        --accent: #5b8cff;
-        --accent-2: #6b6eff;
-        --muted: rgba(255,255,255,0.78);
-        --glass-border: rgba(255,255,255,0.06);
-        --pill-bg: rgba(255,255,255,0.06);
-        --radius: 14px;
-        --shadow-elevate: 0 8px 24px rgba(2,6,23,0.35);
-        font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-    }
+    <!-- Header specific CSS (moved out of inline <style>) -->
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(assetUrl('css/user/header.css')); ?>">
 
-    /* Navbar container */
-    .site-navbar {
-        min-height: var(--nav-h);
-        background: linear-gradient(180deg, rgba(20,22,23,0.88), rgba(30,32,33,0.85));
-        backdrop-filter: blur(var(--nav-blur));
-        -webkit-backdrop-filter: blur(var(--nav-blur));
-        border-bottom: 1px solid var(--glass-border);
-        box-shadow: var(--shadow-elevate);
-        padding: .45rem 1rem;
-    }
-
-    /* Brand */
-    .site-brand {
-        display:flex;
-        align-items:center;
-        gap: .7rem;
-        text-decoration:none;
-        color: #fff;
-        font-weight:700;
-        letter-spacing: .2px;
-    }
-    .site-brand img.site-logo {
-        height:38px;
-        width:auto;
-        border-radius:8px;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 -2px 6px rgba(255,255,255,0.02);
-        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-        padding:4px;
-    }
-    .site-brand .site-brand-text {
-        color: var(--muted);
-        font-size:1rem;
-        display:inline-block;
-    }
-
-    /* Center nav links */
-    .navbar-nav.mx-auto {
-        margin-left:auto;
-        margin-right:auto;
-        gap: .15rem;
-    }
-    .nav-link {
-        color: var(--muted) !important;
-        padding: .45rem .8rem;
-        border-radius: 10px;
-        transition: all .18s cubic-bezier(.2,.9,.2,1);
-        font-weight:600;
-        font-size:0.98rem;
-    }
-    .nav-link:hover, .nav-link:focus {
-        color: #fff !important;
-        transform: translateY(-2px);
-        text-decoration:none;
-    }
-    .nav-link.active {
-        background: linear-gradient(90deg, rgba(91,140,255,0.12), rgba(107,110,255,0.08));
-        color: #fff !important;
-        box-shadow: 0 6px 18px rgba(91,140,255,0.06);
-    }
-
-    /* Search pill */
-    .nav-search {
-        display:flex;
-        align-items:center;
-        gap:.5rem;
-        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
-        border-radius: 999px;
-        padding:6px 10px;
-        min-width:220px;
-        max-width:460px;
-        box-shadow: 0 6px 20px rgba(2,6,23,0.25);
-    }
-    .nav-search input[type="search"]{
-        border:0;
-        outline:0;
-        background:transparent;
-        color: #f7f7f7;
-        padding:6px 8px;
-        font-weight:500;
-    }
-    .nav-search .search-btn {
-        background: transparent;
-        border: none;
-        color: var(--muted);
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        padding:4px;
-        width:36px; height:36px;
-        border-radius:50%;
-        transition: all .15s;
-    }
-    .nav-search .search-btn:hover { transform: scale(1.04); color: #fff; background: rgba(255,255,255,0.03); }
-
-    /* Icon buttons */
-    .nav-icon-btn {
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        color: var(--muted);
-        padding:.4rem .55rem;
-        border-radius:10px;
-        transition: all .12s;
-    }
-    .nav-icon-btn:hover { color:#fff; transform: translateY(-2px); background: rgba(255,255,255,0.03); text-decoration:none; }
-
-    /* Notification / badges */
-    .badge-notif {
-        transform: translateY(-4px);
-        font-size:0.66rem;
-        padding:.18rem .46rem;
-        border-radius:10px;
-        background: linear-gradient(90deg,#ff5f6d,#ffc371);
-        color:#111;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.25);
-        position:relative;
-        margin-left:6px;
-    }
-
-    /* Mobile adjustments */
-    @media (max-width: 991.98px) {
-        .navbar-nav.mx-auto { display:flex; gap:.25rem; }
-        .nav-search { display:none; } /* hidden, mobile has separate collapse */
-    }
-
-    /* Mobile compact search */
-    #mobileSearchContainer {
-        display:none;
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        top: calc(var(--nav-h) + 8px);
-        width: calc(100% - 40px);
-        max-width:720px;
-        z-index: 1500;
-    }
-    #mobileSearchContainer.show {
-        display:block;
-    }
-    #mobileSearchContainer .mobile-search-box {
-        border-radius:12px;
-        padding:10px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
-        box-shadow: 0 12px 30px rgba(2,6,23,0.45);
-        display:flex;
-        gap:.5rem;
-        align-items:center;
-    }
-
-    /* Accessibility helper */
-    .sr-only-focusable:focus { position: static; width:auto; height:auto; overflow:visible; clip:auto; }
-
-    /* subtle caret for dropdown toggles */
-    .dropdown-toggle::after { display:none; }
-
-    </style>
 </head>
 
 <body>
@@ -303,7 +169,7 @@ function assetUrl(string $relativePath): string {
                 <li class="nav-item">
                     <a class="nav-link nav-icon-btn <?php echo isActive('/cart.php'); ?>" href="cart.php" aria-label="Panier">
                         <i class="bi bi-cart2" aria-hidden="true"></i>
-                        <?php if (!empty($_SESSION['cart_count'])): ?>
+                        <?php if (!empty($_SESSION['cart_count']) && $_SESSION['cart_count'] > 0): ?>
                             <span class="badge badge-notif" aria-live="polite" data-badge="cart"><?php echo ((int)$_SESSION['cart_count'] > 99) ? '99+' : (int)$_SESSION['cart_count']; ?></span>
                         <?php endif; ?>
                     </a>
@@ -313,7 +179,7 @@ function assetUrl(string $relativePath): string {
                 <li class="nav-item">
                     <a class="nav-link nav-icon-btn <?php echo isActive('/favorites.php'); ?>" href="favorites.php" aria-label="Favoris">
                         <i class="bi bi-heart" aria-hidden="true"></i>
-                        <?php if (!empty($_SESSION['favorites_count'])): ?>
+                        <?php if (!empty($_SESSION['favorites_count']) && $_SESSION['favorites_count'] > 0): ?>
                             <span class="badge badge-notif" aria-live="polite" data-badge="favorites"><?php echo ((int)$_SESSION['favorites_count'] > 99) ? '99+' : (int)$_SESSION['favorites_count']; ?></span>
                         <?php endif; ?>
                     </a>

@@ -50,10 +50,13 @@ try {
 }
 
 /*
+ * Inclure le helper adresse centralisé (étape 1)
+ */
+include_once __DIR__ . '/includes/address.php';
+
+/*
  * Pré-remplir les champs d'adresse :
- * 1) depuis users (si colonnes présentes)
- * 2) fallback : dernière invoice liée à une commande
- * 3) fallback : valeurs vides
+ * Priorité : users via helper (save_flag) > dernière invoice > valeurs vides
  */
 $billing_address_default = '';
 $city_default = '';
@@ -62,52 +65,73 @@ $save_address_checked = false; // si true => checkbox cochée par défaut
 
 if ($user_id > 0) {
     try {
-        // tenter de récupérer billing_address et la préférence save_address_default si disponibles
-        $q = $pdo->prepare("SELECT billing_address, city, postal_code, IFNULL(save_address_default,0) AS save_address_default FROM users WHERE id = ? LIMIT 1");
-        $q->execute([$user_id]);
-        $u = $q->fetch(PDO::FETCH_ASSOC);
-        if ($u) {
-            $billing_address_default = $u['billing_address'] ?? '';
-            $city_default = $u['city'] ?? '';
-            $postal_code_default = $u['postal_code'] ?? '';
-            $save_address_checked = !empty($u['save_address_default']) ? true : false;
+        $userAddr = getUserAddress($pdo, $user_id);
+        if (!empty($userAddr) && !empty($userAddr['billing_address'])) {
+            $billing_address_default = $userAddr['billing_address'];
+            $city_default = $userAddr['city'] ?? '';
+            $postal_code_default = $userAddr['postal_code'] ?? '';
+            $save_address_checked = !empty($userAddr['save_flag']) ? true : false;
+        } else {
+            $invAddr = getLatestInvoiceAddress($pdo, $user_id);
+            if (!empty($invAddr)) {
+                $billing_address_default = $invAddr['billing_address'] ?? '';
+                $city_default = $invAddr['city'] ?? '';
+                $postal_code_default = $invAddr['postal_code'] ?? '';
+            }
         }
     } catch (Exception $_) {
+        // fallback silencieux
         $billing_address_default = $city_default = $postal_code_default = '';
         $save_address_checked = false;
-    }
-
-    if ($billing_address_default === '' && $city_default === '' && $postal_code_default === '') {
-        try {
-            // fallback : dernière invoice liée à une commande
-            $q2 = $pdo->prepare("SELECT i.billing_address, i.city, i.postal_code
-                                 FROM invoice i
-                                 JOIN orders o ON o.id = i.order_id
-                                 WHERE o.user_id = ?
-                                 ORDER BY i.transaction_date DESC
-                                 LIMIT 1");
-            $q2->execute([$user_id]);
-            $inv = $q2->fetch(PDO::FETCH_ASSOC);
-            if ($inv) {
-                $billing_address_default = $inv['billing_address'] ?? '';
-                $city_default = $inv['city'] ?? '';
-                $postal_code_default = $inv['postal_code'] ?? '';
-                // si on a trouvé une invoice et qu'il n'y avait pas de save flag en user, on ne coche pas automatiquement
-                // sauf si la session indique précédemment la préférence
-            }
-        } catch (Exception $_) {
-            // ignore
-        }
     }
 }
 
 /*
  * Récupérer les articles du panier (avant affichage / traitement)
+ * NOTE: on filtre les produits désactivés (IFNULL(items.is_active,1) = 1) pour éviter que l'utilisateur
+ * puisse acheter des produits supprimés/désactivés. Si des lignes de panier existent mais que l'article
+ * est désactivé, on le signale à l'utilisateur.
  */
+$has_inactive = false;
 try {
-    $stmt = $pdo->prepare("SELECT items.*, cart.quantity FROM items JOIN cart ON items.id = cart.item_id WHERE cart.user_id = ?");
-    $stmt->execute([$user_id]);
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $cartStmt = $pdo->prepare("
+        SELECT 
+            cart.id AS cart_id,
+            cart.quantity,
+            items.id AS item_id,
+            items.name,
+            items.price,
+            items.stock,
+            items.stock_alert_threshold,
+            IFNULL(items.is_active, 1) AS is_active
+        FROM cart
+        LEFT JOIN items ON items.id = cart.item_id
+        WHERE cart.user_id = ?
+    ");
+    $cartStmt->execute([$user_id]);
+    $cartRows = $cartStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $items = [];
+    foreach ($cartRows as $row) {
+        // If item deleted or inactive, mark and skip
+        if (empty($row['item_id']) || intval($row['is_active']) !== 1) {
+            $has_inactive = true;
+            continue;
+        }
+
+        $items[] = [
+            'id' => (int)$row['item_id'],
+            'name' => $row['name'],
+            'price' => floatval($row['price']),
+            'stock' => isset($row['stock']) ? intval($row['stock']) : 0,
+            'quantity' => intval($row['quantity']),
+            'stock_alert_threshold' => isset($row['stock_alert_threshold']) ? intval($row['stock_alert_threshold']) : 5
+        ];
+    }
+
+    if ($has_inactive) {
+        $_SESSION['error'] = "Un ou plusieurs articles du panier ne sont plus disponibles ou ont été désactivés.";
+    }
 } catch (Exception $e) {
     $items = [];
     $_SESSION['error'] = "Impossible de récupérer le panier : " . $e->getMessage();
@@ -131,6 +155,12 @@ if (!empty($_SESSION['old_input'])) {
  * Traitement du formulaire de checkout
  * IMPORTANT : ce traitement est fait AVANT l'inclusion du header pour permettre
  * d'utiliser header("Location: ...") sans erreur "headers already sent".
+ *
+ * Modification importante : nous NE décrémentons PLUS le stock ici.
+ * Le stockage permanent (insertion des lignes order_details), la décrémentation
+ * du stock et la génération de la facture sont effectués lors de la confirmation
+ * finale (confirmation.php). Ici on crée simplement la commande (orders) et on
+ * stocke les données nécessaires en session pour la confirmation.
  */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -148,7 +178,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($postal_code === '') $errors[] = "Code postal requis.";
 
     if (empty($items)) {
-        $errors[] = "Votre panier est vide.";
+        // If there are inactive items in the cart previously detected, show specific message
+        if ($has_inactive) {
+            $errors[] = "Votre panier contient des articles qui ne sont plus disponibles.";
+        } else {
+            $errors[] = "Votre panier est vide.";
+        }
     }
 
     // Mettre à jour la préférence en session uniquement si l'utilisateur a explicitement demandé de sauvegarder
@@ -158,76 +193,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         try {
+            /*
+             * 1) Créer la commande (orders) en statut 'pending' et conserver l'order_id
+             *    en session pour que confirmation.php puisse terminer la commande.
+             * 2) On NE crée PAS encore order_details, on NE décrémente PAS le stock,
+             *    on NE vide PAS le panier. Tout cela est fait dans confirmation.php.
+             */
             $pdo->beginTransaction();
 
-            // Insérer la commande
             $ins = $pdo->prepare("INSERT INTO orders (user_id, total_price, status, order_date) VALUES (?, ?, 'pending', NOW())");
             $ins->execute([$user_id, round($total, 2)]);
             $order_id = $pdo->lastInsertId();
 
-            // Enregistrer les détails de la commande et décrémenter le stock
-            $detailStmt = $pdo->prepare("INSERT INTO order_details (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)");
-            $updateStockStmt = $pdo->prepare("UPDATE items SET stock = stock - ? WHERE id = ?");
-            $selectProdStmt = $pdo->prepare("SELECT name, stock, stock_alert_threshold FROM items WHERE id = ?");
-
-            foreach ($items as $item) {
-                $itemId = (int)$item['id'];
-                $qty = (int)$item['quantity'];
-                $price = floatval($item['price']);
-
-                $detailStmt->execute([$order_id, $itemId, $qty, $price]);
-                $updateStockStmt->execute([$qty, $itemId]);
-
-                // Vérifier seuil et créer notification si nécessaire
-                $selectProdStmt->execute([$itemId]);
-                $prod = $selectProdStmt->fetch(PDO::FETCH_ASSOC);
-                if ($prod && isset($prod['stock']) && isset($prod['stock_alert_threshold'])) {
-                    if (intval($prod['stock']) <= intval($prod['stock_alert_threshold'])) {
-                        try {
-                            $msg = "Le produit '{$prod['name']}' est en stock faible ({$prod['stock']} restant, seuil {$prod['stock_alert_threshold']}).";
-                            $notifStmt = $pdo->prepare("INSERT INTO notifications (type, message, is_persistent) VALUES (?, ?, ?)");
-                            $notifStmt->execute(['important', $msg, intval($prod['stock']) == 0 ? 1 : 0]);
-                        } catch (Exception $_) {
-                            // ignore non-fatal notification errors
-                        }
-                    }
-                }
-            }
-
-            // Générer la facture (avec champs sécurisés)
-            $billing_address_db = $billing_address;
-            $city_db = $city;
-            $postal_code_db = $postal_code;
-            $inv = $pdo->prepare("INSERT INTO invoice (order_id, amount, billing_address, city, postal_code) VALUES (?, ?, ?, ?, ?)");
-            $inv->execute([$order_id, round($total, 2), $billing_address_db, $city_db, $postal_code_db]);
-
-            // Vider le panier après la commande
-            $del = $pdo->prepare("DELETE FROM cart WHERE user_id = ?");
-            $del->execute([$user_id]);
-
-            // Enregistrer l'adresse et la préférence dans users si demandé (ou si colonnes existent)
-            if ($user_id > 0 && $save_address) {
-                try {
-                    // Si l'utilisateur a choisi d'enregistrer l'adresse comme défaut => mettre à jour les colonnes
-                    $upd = $pdo->prepare("UPDATE users SET billing_address = ?, city = ?, postal_code = ?, save_address_default = 1 WHERE id = ?");
-                    $upd->execute([$billing_address_db, $city_db, $postal_code_db, $user_id]);
-                } catch (Exception $_) {
-                    // la table users peut ne pas avoir ces colonnes -> ignorer silencieusement
-                }
-            }
-            // NOTE: on NE remet PAS save_address_default = 0 automatiquement lorsqu'il n'est pas coché.
-            // Cela évite d'effacer la préférence existante si l'utilisateur oublie de cocher la case.
-            // Pour retirer la préférence, fournir une action explicite (ex: page profil) est préférable.
-
             $pdo->commit();
 
-            // Rediriger vers la page de confirmation (PRG)
+            // Stocker en session les données nécessaires pour finaliser (confirmation)
+            $_SESSION['pending_order_id'] = $order_id;
+            $_SESSION['pending_order_data'] = [
+                'billing_address' => $billing_address,
+                'city' => $city,
+                'postal_code' => $postal_code,
+                'save_address' => $save_address
+            ];
+
+            // Rediriger vers la page de confirmation / paiement
             header("Location: confirmation.php");
             exit;
 
         } catch (Exception $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            $_SESSION['error'] = "Erreur lors du traitement de la commande : " . $e->getMessage();
+            $_SESSION['error'] = "Erreur lors de la création de la commande : " . $e->getMessage();
             // conserver les valeurs soumises pour ré-affichage
             $_SESSION['old_input'] = [
                 'billing_address' => $billing_address,
@@ -255,6 +250,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  */
 include 'includes/header.php';
 
+// Add checkout-specific stylesheet
+echo '<link rel="stylesheet" href="assets/css/user/checkout.css">' ;
+
 /*
  * Préparer les valeurs à afficher dans le formulaire (priorité : POST > old_input > defaults)
  */
@@ -265,7 +263,7 @@ $form_values['postal_code'] = $_POST['postal_code'] ?? ($old_input['postal_code'
 
 // Déterminer si la checkbox doit être cochée (priorité):
 // 1) si l'utilisateur a récemment demandé la sauvegarde dans la session ($_SESSION['save_address_default'])
-// 2) sinon si l'utilisateur a la colonne save_address_default = 1 (détectée plus haut)
+// 2) sinon si l'utilisateur a la colonne save_address_default = 1 (détectée via helper)
 // 3) sinon false
 $save_checked = false;
 if (!empty($_SESSION['save_address_default'])) {
@@ -276,34 +274,6 @@ if (!empty($_SESSION['save_address_default'])) {
     $save_checked = false;
 }
 ?>
-<style>
-/* Visual improvements for checkout */
-.checkout-wrapper { max-width: 1200px; margin: 28px auto; display: grid; grid-template-columns: 1fr 360px; gap: 28px; align-items:start; padding: 0 16px; }
-.checkout-panel, .summary-panel { background: #ffffff; padding: 22px; border-radius: 12px; box-shadow: 0 8px 22px rgba(15,23,42,0.05); }
-.checkout-panel h2 { margin-top: 0; font-size: 1.8rem; }
-.alert-server { background: #fdecea; color:#7c1d1d; border-left:4px solid #f8c4c0; padding: 14px; border-radius:8px; }
-.field-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; align-items:center; }
-.field-row { margin-bottom: 12px; }
-.field-row label { display:block; font-weight:600; margin-bottom:6px; color:#1f2937; }
-.field-row input[type="text"], .field-row input[type="email"], .field-row input[type="number"] {
-    width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:0.95rem;
-    box-sizing:border-box;
-}
-.form-check { margin-top:8px; display:flex; align-items:center; gap:8px; }
-.form-actions { display:flex; gap:12px; margin-top:16px; flex-wrap:wrap; }
-.btn { display:inline-block; padding:10px 18px; border-radius:8px; cursor:pointer; font-weight:600; border:1px solid transparent; }
-.btn-primary { background:#2563eb; color:#fff; }
-.btn-ghost { background:transparent; color:#2563eb; border:1px solid #cfe0ff; }
-.btn-danger { background:#ef4444; color:#fff; }
-.summary-panel h3 { margin-top:0; font-size:1.1rem; }
-.summary-line { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #eef2f7; }
-.small-muted { color:#6b7280; font-size:0.9rem; }
-.badge-default { display:inline-block; background:#10b981; color:#fff; padding:4px 8px; border-radius:999px; font-size:0.85rem; margin-left:8px; }
-@media (max-width: 900px) {
-    .checkout-wrapper { grid-template-columns: 1fr; }
-    .summary-panel { order: 2; }
-}
-</style>
 
 <main class="checkout-wrapper" role="main" aria-labelledby="checkoutTitle">
     <section class="checkout-panel" aria-labelledby="checkoutTitle">

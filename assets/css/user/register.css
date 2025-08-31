@@ -1,0 +1,25 @@
+.register-section {
+    max-width: 500px;
+}
+
+/* Assure un espacement visuel cohérent avec les autres pages */
+.register-section.bg-white {
+    background-color: #ffffff;
+}
+
+/* Ajustements mineurs pour les formulaires */
+.register-section .form-group label {
+    font-weight: 600;
+}
+
+.register-section .btn-block {
+    width: 100%;
+}
+
+/* Adaptation pour les très petits écrans */
+@media (max-width: 480px) {
+    .register-section {
+        padding: 1.25rem;
+        margin: 0 12px;
+    }
+}

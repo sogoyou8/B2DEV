@@ -288,38 +288,7 @@ function resolveImageSrcAdmin(string $imageName = ''): string {
     <meta charset="UTF-8">
     <title>Gérer les images du produit</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        :root{
-            --card-radius:12px;
-            --muted:#6c757d;
-            --bg-gradient-1:#f8fbff;
-            --bg-gradient-2:#eef7ff;
-            --accent:#0d6efd;
-            --accent-2:#6610f2;
-        }
-        body.admin-page {
-            background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2));
-            -webkit-font-smoothing:antialiased;
-            -moz-osx-font-smoothing:grayscale;
-        }
-        .panel-card {
-            border-radius: var(--card-radius);
-            background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff);
-            box-shadow: 0 12px 36px rgba(3,37,76,0.06);
-            padding: 1.25rem;
-        }
-        .page-title { display:flex; gap:1rem; align-items:center; }
-        .page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
-        .controls { display:flex; gap:.5rem; align-items:center; }
-        .btn-round { border-radius:8px; }
-        .thumb { width:120px; height:80px; object-fit:cover; border-radius:8px; box-shadow:0 8px 20px rgba(3,37,76,0.04); }
-        table { width:100%; border-collapse:collapse; }
-        table td, table th { padding:8px; vertical-align:middle; }
-        .preview { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
-        .preview img { max-width:220px; border-radius:8px; }
-        .sortable-dragging { outline:2px dashed rgba(13,110,253,0.4); opacity:.9; }
-        .small-muted { color:var(--muted); font-size:.95rem; }
-    </style>
+    <link rel="stylesheet" href="../assets/css/admin/manage_product_images.css">
 </head>
 <body class="admin-page">
 <main class="container py-4">

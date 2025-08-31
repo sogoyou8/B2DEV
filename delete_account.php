@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
+    <?php echo '<link rel="stylesheet" href="assets/css/user/delete_account.css">' ; ?>
     <main class="d-flex justify-content-center align-items-center min-vh-100 bg-light">
         <section class="delete-account-section bg-white p-5 rounded shadow-sm">
             <h2 class="h3 mb-4 font-weight-bold">Supprimer le compte</h2>

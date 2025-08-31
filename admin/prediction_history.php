@@ -74,27 +74,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
 ?>
 <script>try { document.body.classList.add('admin-page'); } catch(e){}</script>
-<style>
-:root{
-    --card-radius:12px;
-    --muted:#6c757d;
-    --bg-gradient-1:#f8fbff;
-    --bg-gradient-2:#eef7ff;
-    --accent:#198754;
-    --accent-2:#0f5132;
-}
-body.admin-page { background: linear-gradient(180deg, var(--bg-gradient-1), var(--bg-gradient-2)); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
-.panel-card { border-radius: var(--card-radius); background: linear-gradient(180deg, rgba(255,255,255,0.98), #fff); box-shadow: 0 12px 36px rgba(3,37,76,0.06); padding: 1.25rem; }
-.page-title { display:flex; gap:1rem; align-items:center; }
-.page-title h2 { margin:0; font-weight:700; color:var(--accent-2); background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip: text; -webkit-text-fill-color:transparent; }
-.controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-.btn-round { border-radius:8px; }
-.table thead th { background: linear-gradient(180deg,#fbfdff,#f2f7ff); border-bottom:1px solid rgba(3,37,76,0.06); font-weight:600; }
-.small-muted { color:var(--muted); font-size:.95rem; }
-.input-search { max-width:540px; width:100%; }
-.badge-status { border-radius:8px; padding:.35em .6em; font-size:.9rem; }
-@media (max-width:768px) { .controls { width:100%; justify-content:space-between; } }
-</style>
+<link rel="stylesheet" href="../assets/css/admin/prediction_history.css">
 
 <main class="container py-4">
     <section class="panel-card mb-4">
